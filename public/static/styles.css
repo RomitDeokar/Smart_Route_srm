@@ -260,6 +260,7 @@ a{color:var(--primary);text-decoration:none}
 .loading-agent{font-size:1.8rem;animation:bounce 1s infinite;opacity:0.6}
 .loading-agent.active{opacity:1}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes wizardPulse{0%{box-shadow:0 0 0 0 rgba(102,126,234,0.4)}50%{box-shadow:0 0 0 12px rgba(102,126,234,0)}100%{box-shadow:0 0 0 0 rgba(102,126,234,0)}}
 .loading-sub{font-size:0.82rem;color:var(--text-3)}
 
 /* Chatbot */

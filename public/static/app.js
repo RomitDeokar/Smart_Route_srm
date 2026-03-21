@@ -8,7 +8,7 @@ const API_BASE = window.location.origin;
 
 // === STATE ===
 const state = {
-  theme: localStorage.getItem('sr-theme') || 'dark',
+  theme: localStorage.getItem('sr-theme') || 'light',
   persona: 'solo',
   itinerary: null,
   agents: {},
@@ -26,7 +26,7 @@ const state = {
   markers: [],
   routeLines: [],
   showRoutes: true,
-  mapLayer: 'dark',
+  mapLayer: 'light',
   bookingCart: { flights:null, trains:null, hotels:null, cabs:null },
   bookingHistory: JSON.parse(localStorage.getItem('sr-history')||'[]'),
   packingList: {},
@@ -63,30 +63,37 @@ const CITY_COORDS = {
 
 // === PHOTO CACHE & FALLBACKS ===
 const _photoCache = new Map();
-const FALLBACK_PHOTOS = {
-  temple:'https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/Brihadeeswara_Temple%2C_Dedicated_to_Shiva%2C_built_by_Rajaraja_I%2C_completed_in_1010_AD%2C_Thanjavur_%2850%29.jpg/400px-Brihadeeswara_Temple%2C_Dedicated_to_Shiva%2C_built_by_Rajaraja_I%2C_completed_in_1010_AD%2C_Thanjavur_%2850%29.jpg',
-  museum:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Government_Museum_Chennai_Front_view.jpg/400px-Government_Museum_Chennai_Front_view.jpg',
-  fort:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Amber_Fort_Jaipur_India.jpg/400px-Amber_Fort_Jaipur_India.jpg',
-  palace:'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Hawa_Mahal_on_a_stormy_day.jpg/400px-Hawa_Mahal_on_a_stormy_day.jpg',
-  beach:'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Marina_Beach_-_A_panoramic_view.jpg/400px-Marina_Beach_-_A_panoramic_view.jpg',
-  park:'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Lalbagh_Botanical_Garden_Glass_House_with_Flowers.jpg/400px-Lalbagh_Botanical_Garden_Glass_House_with_Flowers.jpg',
-  monument:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Taj_Mahal_%28Edited%29.jpeg/400px-Taj_Mahal_%28Edited%29.jpeg',
-  attraction:'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/India_Gate_in_New_Delhi_03-2016.jpg/400px-India_Gate_in_New_Delhi_03-2016.jpg',
-  historic:'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Konark_Sun_Temple_%28Full_view%29.jpg/400px-Konark_Sun_Temple_%28Full_view%29.jpg',
-  viewpoint:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/Darjeeling%2C_India%2C_Observation_deck%2C_Tiger_Hill.jpg/400px-Darjeeling%2C_India%2C_Observation_deck%2C_Tiger_Hill.jpg',
-  market:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Jaipur_Johari_Bazaar.jpg/400px-Jaipur_Johari_Bazaar.jpg',
-};
+// Fallback is a neutral placeholder, NOT a specific place photo
+const PLACEHOLDER_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none"><rect width="400" height="300" fill="%23e5e7eb"/><text x="200" y="140" text-anchor="middle" fill="%239ca3af" font-family="system-ui" font-size="24">Loading photo...</text><text x="200" y="170" text-anchor="middle" fill="%239ca3af" font-family="system-ui" font-size="40">📷</text></svg>');
+
 function getFallbackPhoto(type) {
-  if (!type) return FALLBACK_PHOTOS.attraction;
-  const t = type.toLowerCase();
-  return FALLBACK_PHOTOS[t] || Object.values(FALLBACK_PHOTOS).find((_,i) => Object.keys(FALLBACK_PHOTOS)[i] && t.includes(Object.keys(FALLBACK_PHOTOS)[i])) || FALLBACK_PHOTOS.attraction;
+  return PLACEHOLDER_IMG;
 }
 
-async function fetchPlacePhoto(name, type) {
-  const key = name.toLowerCase();
+async function fetchPlacePhoto(name, type, wikiTitle) {
+  const key = (wikiTitle || name).toLowerCase();
   if (_photoCache.has(key)) return _photoCache.get(key);
+  
+  // Try wikiTitle first (most accurate), then place name, then search
+  const attempts = [wikiTitle || name, name];
+  for (const title of [...new Set(attempts)]) {
+    if (!title) continue;
+    try {
+      const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&titles=${encodeURIComponent(title)}&prop=pageimages&piprop=thumbnail&pithumbsize=400&redirects=1&origin=*`);
+      const d = await r.json();
+      const pages = d?.query?.pages || {};
+      for (const p of Object.values(pages)) {
+        if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg') && !p.thumbnail.source.includes('Flag_of')) {
+          _photoCache.set(key, p.thumbnail.source);
+          return p.thumbnail.source;
+        }
+      }
+    } catch(e) {}
+  }
+  
+  // Try Wikipedia search API as last resort
   try {
-    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&titles=${encodeURIComponent(name)}&prop=pageimages&piprop=thumbnail&pithumbsize=400&redirects=1&origin=*`);
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=3&prop=pageimages&piprop=thumbnail&pithumbsize=400&origin=*`);
     const d = await r.json();
     const pages = d?.query?.pages || {};
     for (const p of Object.values(pages)) {
@@ -96,9 +103,9 @@ async function fetchPlacePhoto(name, type) {
       }
     }
   } catch(e) {}
-  const fb = getFallbackPhoto(type);
-  _photoCache.set(key, fb);
-  return fb;
+  
+  _photoCache.set(key, PLACEHOLDER_IMG);
+  return PLACEHOLDER_IMG;
 }
 
 // ============================================
@@ -120,6 +127,11 @@ function applyTheme() {
   document.documentElement.setAttribute('data-theme', state.theme);
   const icon = document.getElementById('themeIcon');
   if (icon) icon.className = state.theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+  // Also sync map layer with theme
+  if (state.map && state.mapLayer !== (state.theme === 'dark' ? 'dark' : 'light')) {
+    state.mapLayer = state.theme === 'dark' ? 'dark' : 'light';
+    setMapLayer();
+  }
 }
 function toggleTheme() {
   state.theme = state.theme === 'dark' ? 'light' : 'dark';
@@ -139,18 +151,18 @@ function initMap() {
 function setMapLayer() {
   if (state.mapTileLayer) state.map.removeLayer(state.mapTileLayer);
   const urls = {
-    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    light: 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png',
     street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
   };
-  state.mapTileLayer = L.tileLayer(urls[state.mapLayer] || urls.dark, {
+  state.mapTileLayer = L.tileLayer(urls[state.mapLayer] || urls.light, {
     attribution: '&copy; OpenStreetMap & CartoDB',
     maxZoom: 19
   }).addTo(state.map);
 }
 function toggleMapLayer() {
-  const layers = ['dark','light','satellite','street'];
+  const layers = ['light','street','satellite','dark'];
   const idx = layers.indexOf(state.mapLayer);
   state.mapLayer = layers[(idx+1)%layers.length];
   setMapLayer();
@@ -341,6 +353,17 @@ async function generateTrip() {
     document.getElementById('insightsPanel').style.display = 'block';
     showToast(`✅ ${destination} trip generated with ${data.itinerary.days_data.reduce((s,d)=>s+d.activities.length,0)} activities!`, 'success');
 
+    // Auto-scroll to booking wizard with agentic AI feel
+    setTimeout(() => {
+      const wizard = document.getElementById('agenticWizard');
+      if (wizard) {
+        wizard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Add a pulse animation to draw attention
+        wizard.style.animation = 'wizardPulse 0.6s ease-in-out 2';
+        setTimeout(() => { wizard.style.animation = ''; }, 1200);
+      }
+    }, 800);
+
   } catch(err) {
     console.error('Trip generation error:', err);
     showToast('Error generating trip: ' + err.message, 'error');
@@ -375,10 +398,10 @@ function renderItinerary(itin) {
       </div>
     `).join('');
 
-  // Fetch photos asynchronously
+  // Fetch photos asynchronously using wikiTitle for accuracy
   itin.days_data.forEach(day => {
     day.activities?.forEach(async (act, idx) => {
-      const photo = act.photo || await fetchPlacePhoto(act.name, act.type);
+      const photo = act.photo || await fetchPlacePhoto(act.name, act.type, act.wikiTitle);
       const img = document.querySelector(`#act-photo-${day.day}-${idx}`);
       if (img && photo) img.src = photo;
     });
@@ -386,11 +409,11 @@ function renderItinerary(itin) {
 }
 
 function renderActivityCard(act, dayNum, idx) {
-  const photo = act.photo || getFallbackPhoto(act.type);
+  const photo = act.photo || PLACEHOLDER_IMG;
   const crowdColor = act.crowd_level > 70 ? 'var(--danger)' : act.crowd_level > 40 ? 'var(--warning)' : 'var(--success)';
   return `
     <div class="activity-card" data-name="${act.name}" data-lat="${act.lat}" data-lon="${act.lon}">
-      <img class="activity-photo" id="act-photo-${dayNum}-${idx}" src="${photo}" alt="${act.name}" onerror="this.src='${getFallbackPhoto(act.type)}'" loading="lazy">
+      <img class="activity-photo" id="act-photo-${dayNum}-${idx}" src="${photo}" alt="${act.name}" onerror="this.src='${PLACEHOLDER_IMG}'" loading="lazy">
       <div class="activity-info">
         <div class="activity-name" onclick="openPlaceModal('${act.name.replace(/'/g,"\\'")}',${act.lat},${act.lon},'${(act.type||'').replace(/'/g,"\\'")}','${(act.description||'').replace(/'/g,"\\'").substring(0,100)}')">${act.name}</div>
         <div class="activity-desc">${act.description || act.type}</div>
@@ -707,7 +730,8 @@ function updateAtlasStats() {
 function renderAtlasMap() {
   if (state.atlasMap) { state.atlasMap.remove(); state.atlasMap = null; }
   state.atlasMap = L.map('atlasMap').setView([20, 78], 4);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM' }).addTo(state.atlasMap);
+  const atlasUrl = state.theme === 'dark' ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png';
+  L.tileLayer(atlasUrl, { attribution: '&copy; OSM & CartoDB', maxZoom: 19 }).addTo(state.atlasMap);
 
   state.atlasTrips.forEach(trip => {
     L.circleMarker([trip.lat, trip.lon], {
@@ -748,7 +772,7 @@ function renderDiscovery(itin, restaurants) {
   const activities = itin.days_data.flatMap(d => d.activities).slice(0, 6);
   instaGrid.innerHTML = activities.map(act => `
     <div class="discovery-card" onclick="openPlaceModal('${act.name.replace(/'/g,"\\'")}',${act.lat},${act.lon},'${act.type}','')">
-      <img src="${act.photo || getFallbackPhoto(act.type)}" alt="${act.name}" onerror="this.src='${getFallbackPhoto(act.type)}'" loading="lazy">
+      <img src="${act.photo || PLACEHOLDER_IMG}" alt="${act.name}" onerror="this.src='${PLACEHOLDER_IMG}'" loading="lazy" data-wiki="${act.wikiTitle||act.name}" class="disc-img">
       <div class="discovery-card-body">
         <div class="discovery-card-title">${act.name}</div>
         <div class="discovery-card-meta">📍 ${itin.destination} · ${act.type} · ₹${act.cost}</div>
@@ -756,13 +780,21 @@ function renderDiscovery(itin, restaurants) {
     </div>
   `).join('');
   document.querySelector('#disc-instagram .empty-state')?.remove();
+  // Async load discovery photos
+  document.querySelectorAll('.disc-img').forEach(async img => {
+    const wiki = img.getAttribute('data-wiki');
+    if (wiki && img.src.includes('data:image')) {
+      const url = await fetchPlacePhoto(wiki, '', wiki);
+      if (url && !url.includes('data:image')) img.src = url;
+    }
+  });
 
   // YouTube hidden gems
   const ytGrid = document.getElementById('ytGrid');
   const hiddenGems = itin.days_data.flatMap(d => d.activities).filter(a => a.crowd_level < 40).slice(0, 4);
   ytGrid.innerHTML = hiddenGems.map(act => `
     <div class="discovery-card">
-      <img src="${act.photo || getFallbackPhoto(act.type)}" alt="${act.name}" onerror="this.src='${getFallbackPhoto(act.type)}'" loading="lazy">
+      <img src="${act.photo || PLACEHOLDER_IMG}" alt="${act.name}" onerror="this.src='${PLACEHOLDER_IMG}'" loading="lazy">
       <div class="discovery-card-body">
         <div class="discovery-card-title">💎 ${act.name}</div>
         <div class="discovery-card-meta">Low crowd (${act.crowd_level}%) · Hidden Gem</div>
@@ -904,6 +936,22 @@ function updateCrowdLevel(itin) {
 function showBookingWizard(itin) {
   document.getElementById('agenticWizard').style.display = 'block';
   document.querySelector('[data-step="trip_planned"]').classList.add('completed');
+  
+  // Agentic AI prompt — typing effect
+  const dest = itin.destination || 'your destination';
+  const actCount = itin.days_data?.reduce((s,d)=>s+d.activities.length,0) || 0;
+  const promptText = document.getElementById('agentPromptText');
+  const fullText = `🎯 Your ${dest} trip is ready — ${actCount} activities across ${itin.days} days! I've found the best flights, trains, hotels, and cabs. Let me help you book everything seamlessly.`;
+  promptText.textContent = '';
+  let charIdx = 0;
+  const typeInterval = setInterval(() => {
+    if (charIdx < fullText.length) {
+      promptText.textContent += fullText[charIdx];
+      charIdx++;
+    } else {
+      clearInterval(typeInterval);
+    }
+  }, 15);
 }
 
 async function searchFlights() {
@@ -970,8 +1018,10 @@ function renderBookingResults(title, results, type) {
       <div class="booking-card" onclick="selectBooking('flights',${JSON.stringify(f).replace(/"/g,'&quot;')},this)">
         <div class="booking-card-title">${f.airline} — ${f.flight_no}</div>
         <div class="booking-card-price">₹${f.price.toLocaleString()}</div>
-        <div class="booking-card-meta">${f.departure} → ${f.arrival} · ${f.duration} · ${f.class} · ${f.stops===0?'Non-stop':f.stops+' stop(s)'}</div>
-        <div style="margin-top:6px"><a href="${f.bookingUrl}" target="_blank" class="text-xs" style="color:var(--primary)">🔗 Book on Google Flights</a></div>
+        <div class="booking-card-meta">${f.departure} → ${f.arrival} · ${f.duration} · ${f.class} · ${f.stops===0?'Non-stop':f.stops+' stop(s)'} · ⭐ ${f.rating}</div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
+          ${(f.bookingPlatforms||[{name:'Google Flights',url:f.bookingUrl}]).map(p => `<a href="${p.url}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 ${p.name}</a>`).join('')}
+        </div>
       </div>
     `).join('');
   } else if (type === 'train') {
@@ -980,7 +1030,9 @@ function renderBookingResults(title, results, type) {
         <div class="booking-card-title">${t.train_name} — ${t.train_no}</div>
         <div class="booking-card-price">₹${t.price.toLocaleString()}</div>
         <div class="booking-card-meta">${t.departure} · ${t.duration} · Class: ${t.class}</div>
-        <div style="margin-top:6px"><a href="${t.bookingUrl}" target="_blank" class="text-xs" style="color:var(--primary)">🔗 Book on IRCTC</a></div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
+          ${(t.bookingPlatforms||[{name:'IRCTC',url:t.bookingUrl}]).map(p => `<a href="${p.url}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 ${p.name}</a>`).join('')}
+        </div>
       </div>
     `).join('');
   } else if (type === 'hotel') {
@@ -989,15 +1041,18 @@ function renderBookingResults(title, results, type) {
         <div class="booking-card-title">${h.name} ${'⭐'.repeat(h.stars)}</div>
         <div class="booking-card-price">₹${h.price_per_night.toLocaleString()}/night</div>
         <div class="booking-card-meta">Total: ₹${h.total_price.toLocaleString()} · Rating: ${h.rating} · ${h.amenities.join(', ')}</div>
-        <div style="margin-top:6px"><a href="${h.bookingUrl}" target="_blank" class="text-xs" style="color:var(--primary)">🔗 Book on Booking.com</a></div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
+          ${(h.bookingPlatforms||[{name:'Booking.com',url:h.bookingUrl}]).map(p => `<a href="${p.url}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 ${p.name}</a>`).join('')}
+        </div>
       </div>
     `).join('');
   } else if (type === 'cab') {
     list.innerHTML = results.map(c => `
       <div class="booking-card" onclick="selectBooking('cabs',${JSON.stringify(c).replace(/"/g,'&quot;')},this)">
         <div class="booking-card-title">${c.provider} — ${c.type}</div>
-        <div class="booking-card-price">₹${c.base_fare} + ₹${c.price_per_km}/km</div>
-        <div style="margin-top:6px"><a href="${c.bookingUrl}" target="_blank" class="text-xs" style="color:var(--primary)">🔗 Open ${c.provider}</a></div>
+        <div class="booking-card-price">₹${c.base_fare} base + ₹${c.price_per_km}/km</div>
+        <div class="booking-card-meta">${c.estimated_10km ? `Est. 10km ride: ₹${c.estimated_10km}` : ''}</div>
+        <div style="margin-top:6px"><a href="${c.bookingUrl}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 Open ${c.provider}</a></div>
       </div>
     `).join('');
   }
@@ -1125,8 +1180,8 @@ function openPlaceModal(name, lat, lon, type, desc) {
   setTimeout(() => miniMap.invalidateSize(), 100);
 
   // Photos
-  fetchPlacePhoto(name, type).then(url => {
-    document.getElementById('modalPhotos').innerHTML = url ? `<img src="${url}" alt="${name}">` : '<p class="text-sm text-muted">No photos available</p>';
+  fetchPlacePhoto(name, type, name).then(url => {
+    document.getElementById('modalPhotos').innerHTML = url && !url.includes('data:image') ? `<img src="${url}" alt="${name}" style="max-width:100%;border-radius:8px">` : '<p class="text-sm text-muted">Loading photo...</p>';
   });
 }
 

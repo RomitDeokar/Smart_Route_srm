@@ -115,6 +115,126 @@ const CITY_COORDS: Record<string, [number,number]> = {
   madurai:[9.9252,78.1198],thanjavur:[10.787,79.1378],kodaikanal:[10.2381,77.4892]
 }
 
+// Curated top attractions per city — ensures major tourist spots are always included
+const CITY_TOP_ATTRACTIONS: Record<string, any[]> = {
+  chennai: [
+    {name:'Marina Beach',lat:13.0500,lon:80.2824,type:'beach',description:'One of the longest urban beaches in the world, stretching 13 km along the Bay of Bengal.',wikiTitle:'Marina Beach'},
+    {name:'Kapaleeshwarar Temple',lat:13.0339,lon:80.2694,type:'temple',description:'Ancient Dravidian-style Shiva temple dating back to the 7th century in Mylapore.',wikiTitle:'Kapaleeshwarar Temple'},
+    {name:'Fort St. George',lat:13.0797,lon:80.2871,type:'fort',description:'First English fortress in India, built in 1644 by the East India Company.',wikiTitle:'Fort St. George, Chennai'},
+    {name:'San Thome Cathedral',lat:13.0335,lon:80.2780,type:'historic',description:'A Roman Catholic cathedral built over the tomb of St. Thomas the Apostle.',wikiTitle:'San Thome Cathedral'},
+    {name:'Government Museum Chennai',lat:13.0699,lon:80.2539,type:'museum',description:'Second oldest museum in India with a rich collection of archaeological artifacts.',wikiTitle:'Government Museum, Chennai'},
+    {name:'Valluvar Kottam',lat:13.0508,lon:80.2345,type:'monument',description:'A monument dedicated to the Tamil poet Thiruvalluvar, shaped like a temple chariot.',wikiTitle:'Valluvar Kottam'},
+    {name:'Elliot Beach',lat:13.0005,lon:80.2730,type:'beach',description:'A serene beach in Besant Nagar, popular with locals for evening walks.',wikiTitle:"Elliot's Beach"},
+    {name:'DakshinaChitra Museum',lat:12.8168,lon:80.2261,type:'museum',description:'Living museum of art, architecture, and culture of South India.',wikiTitle:'DakshinaChitra'},
+    {name:'Mahabalipuram Shore Temple',lat:12.6169,lon:80.1993,type:'temple',description:'UNESCO World Heritage Site — a 7th-century structural temple overlooking the Bay of Bengal.',wikiTitle:'Shore Temple'},
+    {name:"Arjuna's Penance",lat:12.6165,lon:80.1946,type:'monument',description:'World\'s largest open-air bas-relief, a masterpiece of Pallava sculpture at Mahabalipuram.',wikiTitle:"Arjuna%27s Penance"},
+    {name:'Santhome Church',lat:13.0328,lon:80.2775,type:'historic',description:'One of only three churches built over the tomb of an apostle of Jesus.',wikiTitle:'San Thome Cathedral'},
+    {name:'Guindy National Park',lat:13.0063,lon:80.2346,type:'park',description:'One of the few national parks inside a city, home to blackbuck and spotted deer.',wikiTitle:'Guindy National Park'},
+  ],
+  jaipur: [
+    {name:'Amber Fort',lat:26.9855,lon:75.8513,type:'fort',description:'Magnificent hilltop fort palace overlooking Maota Lake, built from red sandstone and marble.',wikiTitle:'Amber Fort'},
+    {name:'Hawa Mahal',lat:26.9239,lon:75.8267,type:'palace',description:'Iconic Palace of Winds with 953 small windows designed for royal women to observe street life.',wikiTitle:'Hawa Mahal'},
+    {name:'City Palace Jaipur',lat:26.9258,lon:75.8237,type:'palace',description:'Grand palace complex blending Mughal and Rajput architecture, still home to the royal family.',wikiTitle:'City Palace, Jaipur'},
+    {name:'Jantar Mantar',lat:26.9247,lon:75.8241,type:'monument',description:'UNESCO World Heritage astronomical observation site with the world\'s largest sundial.',wikiTitle:'Jantar Mantar, Jaipur'},
+    {name:'Nahargarh Fort',lat:26.9378,lon:75.8150,type:'fort',description:'Hilltop fort offering stunning panoramic views of the Pink City, especially at sunset.',wikiTitle:'Nahargarh Fort'},
+    {name:'Jaigarh Fort',lat:26.9864,lon:75.8427,type:'fort',description:'Fort housing Jaivana, the world\'s largest cannon on wheels.',wikiTitle:'Jaigarh Fort'},
+    {name:'Albert Hall Museum',lat:26.9117,lon:75.8190,type:'museum',description:'Indo-Saracenic architecture museum housing Egyptian mummy and ancient artifacts.',wikiTitle:'Albert Hall Museum'},
+    {name:'Jal Mahal',lat:26.9530,lon:75.8466,type:'palace',description:'Ethereal floating palace in the middle of Man Sagar Lake.',wikiTitle:'Jal Mahal'},
+    {name:'Birla Mandir Jaipur',lat:26.8923,lon:75.8150,type:'temple',description:'Beautiful white marble temple dedicated to Lord Vishnu and Goddess Lakshmi.',wikiTitle:'Birla Mandir, Jaipur'},
+    {name:'Johari Bazaar',lat:26.9213,lon:75.8269,type:'market',description:'Famous jewelry and textile market in the heart of the Pink City.',wikiTitle:'Johari Bazaar'},
+  ],
+  goa: [
+    {name:'Calangute Beach',lat:15.5441,lon:73.7554,type:'beach',description:'The largest beach in North Goa, known as the Queen of Beaches.',wikiTitle:'Calangute'},
+    {name:'Fort Aguada',lat:15.4920,lon:73.7738,type:'fort',description:'17th-century Portuguese fort with a lighthouse overlooking the Arabian Sea.',wikiTitle:'Fort Aguada'},
+    {name:'Basilica of Bom Jesus',lat:15.5009,lon:73.9116,type:'historic',description:'UNESCO World Heritage Site housing the remains of St. Francis Xavier.',wikiTitle:'Basilica of Bom Jesus'},
+    {name:'Dudhsagar Falls',lat:15.3144,lon:74.3143,type:'viewpoint',description:'Four-tiered waterfall on the Mandovi River, one of India\'s tallest at 310m.',wikiTitle:'Dudhsagar Falls'},
+    {name:'Anjuna Beach',lat:15.5741,lon:73.7412,type:'beach',description:'Famous for its Wednesday flea market and vibrant nightlife.',wikiTitle:'Anjuna'},
+    {name:'Se Cathedral',lat:15.5039,lon:73.9128,type:'historic',description:'One of the largest churches in Asia, built in Portuguese-Gothic style.',wikiTitle:'Se Cathedral of Goa'},
+    {name:'Palolem Beach',lat:15.0099,lon:74.0235,type:'beach',description:'Crescent-shaped beach in South Goa known for its calm waters and beauty.',wikiTitle:'Palolem'},
+    {name:'Baga Beach',lat:15.5563,lon:73.7513,type:'beach',description:'Popular beach famous for water sports, nightlife, and shack culture.',wikiTitle:'Baga Beach'},
+  ],
+  delhi: [
+    {name:'Red Fort',lat:28.6562,lon:77.2410,type:'fort',description:'UNESCO World Heritage Mughal fort, India\'s Independence Day celebrations venue.',wikiTitle:'Red Fort'},
+    {name:'Qutub Minar',lat:28.5245,lon:77.1855,type:'monument',description:'UNESCO site — tallest brick minaret in the world at 72.5 meters.',wikiTitle:'Qutub Minar'},
+    {name:'India Gate',lat:28.6129,lon:77.2295,type:'monument',description:'Iconic 42m war memorial arch on Rajpath, central landmark of Delhi.',wikiTitle:'India Gate'},
+    {name:'Humayun\'s Tomb',lat:28.5933,lon:77.2507,type:'monument',description:'UNESCO Heritage — inspiration for the Taj Mahal, set in beautiful gardens.',wikiTitle:"Humayun%27s Tomb"},
+    {name:'Lotus Temple',lat:28.5535,lon:77.2588,type:'temple',description:'Baha\'i House of Worship shaped like a lotus flower, architectural marvel.',wikiTitle:'Lotus Temple'},
+    {name:'Jama Masjid',lat:28.6507,lon:77.2334,type:'historic',description:'India\'s largest mosque, built by Shah Jahan with stunning red sandstone.',wikiTitle:'Jama Masjid, Delhi'},
+    {name:'Akshardham Temple',lat:28.6127,lon:77.2773,type:'temple',description:'Spectacular Hindu temple complex showcasing 10,000 years of Indian culture.',wikiTitle:'Akshardham (Delhi)'},
+    {name:'Chandni Chowk',lat:28.6506,lon:77.2302,type:'market',description:'One of India\'s oldest and busiest markets, famous for street food.',wikiTitle:'Chandni Chowk'},
+    {name:'Lodhi Garden',lat:28.5935,lon:77.2197,type:'park',description:'Historic park with 15th-century Mughal tombs spread over 90 acres.',wikiTitle:'Lodhi Garden'},
+    {name:'Rashtrapati Bhavan',lat:28.6143,lon:77.1994,type:'monument',description:'The presidential palace of India, an architectural masterpiece.',wikiTitle:'Rashtrapati Bhavan'},
+  ],
+  mumbai: [
+    {name:'Gateway of India',lat:18.9220,lon:72.8347,type:'monument',description:'Iconic arch monument built in 1924 to commemorate King George V\'s visit.',wikiTitle:'Gateway of India'},
+    {name:'Marine Drive',lat:18.9432,lon:72.8235,type:'viewpoint',description:'3.6 km promenade along the coast, known as the Queen\'s Necklace at night.',wikiTitle:'Marine Drive, Mumbai'},
+    {name:'Elephanta Caves',lat:18.9633,lon:72.9315,type:'historic',description:'UNESCO Heritage cave temples dedicated to Lord Shiva on Elephanta Island.',wikiTitle:'Elephanta Caves'},
+    {name:'Chhatrapati Shivaji Terminus',lat:18.9398,lon:72.8355,type:'historic',description:'UNESCO World Heritage Victorian Gothic railway station, architectural marvel.',wikiTitle:'Chhatrapati Shivaji Maharaj Terminus'},
+    {name:'Juhu Beach',lat:19.0989,lon:72.8269,type:'beach',description:'Famous beach known for street food, sunset views, and Bollywood spotting.',wikiTitle:'Juhu Beach'},
+    {name:'Haji Ali Dargah',lat:18.9827,lon:72.8089,type:'temple',description:'Iconic mosque built on an islet, accessible only during low tide.',wikiTitle:'Haji Ali Dargah'},
+    {name:'Siddhivinayak Temple',lat:19.0166,lon:72.8300,type:'temple',description:'One of the richest and most visited Ganesh temples in Mumbai.',wikiTitle:'Siddhivinayak Temple'},
+    {name:'Crawford Market',lat:18.9475,lon:72.8344,type:'market',description:'Historic market with Norman Gothic architecture, bustling with local culture.',wikiTitle:'Mahatma Jyotiba Phule Mandai'},
+  ],
+  agra: [
+    {name:'Taj Mahal',lat:27.1751,lon:78.0421,type:'monument',description:'UNESCO World Heritage — an ivory-white marble mausoleum, one of the Seven Wonders.',wikiTitle:'Taj Mahal'},
+    {name:'Agra Fort',lat:27.1795,lon:78.0211,type:'fort',description:'UNESCO Heritage red sandstone fort with white marble palaces inside.',wikiTitle:'Agra Fort'},
+    {name:'Fatehpur Sikri',lat:27.0945,lon:77.6679,type:'historic',description:'UNESCO Heritage — abandoned Mughal city built by Emperor Akbar.',wikiTitle:'Fatehpur Sikri'},
+    {name:'Itimad-ud-Daulah',lat:27.1925,lon:78.0312,type:'monument',description:'Known as Baby Taj, an exquisite white marble Mughal tomb.',wikiTitle:"Tomb of I%27timad-ud-Daulah"},
+    {name:'Mehtab Bagh',lat:27.1800,lon:78.0444,type:'park',description:'Mughal garden with stunning views of the Taj Mahal across the Yamuna.',wikiTitle:'Mehtab Bagh'},
+  ],
+  varanasi: [
+    {name:'Dashashwamedh Ghat',lat:25.3048,lon:83.0108,type:'historic',description:'The main ghat famous for its spectacular evening Ganga Aarti ceremony.',wikiTitle:'Dashashwamedh Ghat'},
+    {name:'Kashi Vishwanath Temple',lat:25.3109,lon:83.0107,type:'temple',description:'One of the most revered Hindu temples dedicated to Lord Shiva.',wikiTitle:'Kashi Vishwanath Temple'},
+    {name:'Sarnath',lat:25.3814,lon:83.0224,type:'historic',description:'Buddhist pilgrimage site where Buddha gave his first sermon.',wikiTitle:'Sarnath'},
+    {name:'Assi Ghat',lat:25.2856,lon:83.0063,type:'historic',description:'The southernmost ghat of Varanasi, important pilgrimage and cultural spot.',wikiTitle:'Assi Ghat'},
+    {name:'Manikarnika Ghat',lat:25.3128,lon:83.0120,type:'historic',description:'The primary cremation ghat, considered the most sacred in Hinduism.',wikiTitle:'Manikarnika Ghat'},
+    {name:'Ramnagar Fort',lat:25.2866,lon:83.0289,type:'fort',description:'18th-century fort and palace of the Maharaja of Varanasi.',wikiTitle:'Ramnagar Fort'},
+  ],
+  kolkata: [
+    {name:'Victoria Memorial',lat:22.5448,lon:88.3426,type:'monument',description:'Magnificent white marble hall and museum dedicated to Queen Victoria.',wikiTitle:'Victoria Memorial, Kolkata'},
+    {name:'Howrah Bridge',lat:22.5851,lon:88.3468,type:'monument',description:'Iconic cantilever bridge over the Hooghly River, a symbol of Kolkata.',wikiTitle:'Howrah Bridge'},
+    {name:'Indian Museum',lat:22.5583,lon:88.3508,type:'museum',description:'The oldest and largest museum in India with rare collections.',wikiTitle:'Indian Museum'},
+    {name:'Dakshineswar Kali Temple',lat:22.6551,lon:88.3577,type:'temple',description:'Famous temple associated with Ramakrishna Paramahamsa.',wikiTitle:'Dakshineswar Kali Temple'},
+    {name:'Park Street',lat:22.5520,lon:88.3599,type:'market',description:'Historic boulevard known for restaurants, nightlife and colonial architecture.',wikiTitle:'Park Street, Kolkata'},
+  ],
+  udaipur: [
+    {name:'City Palace Udaipur',lat:24.5764,lon:73.6915,type:'palace',description:'Sprawling palace complex on the banks of Lake Pichola, a must-visit.',wikiTitle:'City Palace, Udaipur'},
+    {name:'Lake Pichola',lat:24.5720,lon:73.6809,type:'viewpoint',description:'Beautiful artificial lake with Lake Palace Hotel seemingly floating on it.',wikiTitle:'Lake Pichola'},
+    {name:'Jag Mandir',lat:24.5686,lon:73.6876,type:'palace',description:'Island palace on Lake Pichola, used as a summer resort by royals.',wikiTitle:'Jag Mandir'},
+    {name:'Sajjangarh Palace',lat:24.5770,lon:73.6485,type:'palace',description:'Hilltop Monsoon Palace with panoramic views of the City of Lakes.',wikiTitle:'Monsoon Palace'},
+    {name:'Saheliyon ki Bari',lat:24.5912,lon:73.7022,type:'garden',description:'Garden of the Maidens with fountains, kiosks, marble elephants.',wikiTitle:'Saheliyon-ki-Bari'},
+  ],
+  bangalore: [
+    {name:'Lalbagh Botanical Garden',lat:12.9507,lon:77.5848,type:'park',description:'Sprawling botanical garden with a famous glass house and centuries-old trees.',wikiTitle:'Lal Bagh'},
+    {name:'Bangalore Palace',lat:12.9987,lon:77.5922,type:'palace',description:'Tudor-style palace inspired by Windsor Castle with fortified towers.',wikiTitle:'Bangalore Palace'},
+    {name:'Cubbon Park',lat:12.9763,lon:77.5929,type:'park',description:'120-year-old park in the heart of Bangalore with 6000+ trees.',wikiTitle:'Cubbon Park'},
+    {name:'ISKCON Temple Bangalore',lat:12.9715,lon:77.5511,type:'temple',description:'One of the largest ISKCON temples in the world.',wikiTitle:'ISKCON Temple Bangalore'},
+    {name:'Tipu Sultan Palace',lat:12.9592,lon:77.5737,type:'palace',description:'Summer palace of Tipu Sultan built in Indo-Islamic style.',wikiTitle:"Tipu Sultan%27s Summer Palace"},
+    {name:'Nandi Hills',lat:13.3702,lon:77.6835,type:'viewpoint',description:'Hill station 60km from Bangalore, famous for sunrise and paragliding.',wikiTitle:'Nandi Hills'},
+  ],
+  hyderabad: [
+    {name:'Charminar',lat:17.3616,lon:78.4747,type:'monument',description:'Iconic 16th-century monument and mosque, symbol of Hyderabad.',wikiTitle:'Charminar'},
+    {name:'Golconda Fort',lat:17.3833,lon:78.4011,type:'fort',description:'Massive medieval fort known for its acoustic architecture.',wikiTitle:'Golconda'},
+    {name:'Ramoji Film City',lat:17.2543,lon:78.6808,type:'attraction',description:'World\'s largest integrated film studio complex and theme park.',wikiTitle:'Ramoji Film City'},
+    {name:'Hussain Sagar Lake',lat:17.4239,lon:78.4738,type:'viewpoint',description:'Heart-shaped lake with a monolithic Buddha statue in the center.',wikiTitle:'Hussain Sagar'},
+    {name:'Salar Jung Museum',lat:17.3714,lon:78.4804,type:'museum',description:'One of the largest one-man collections of art in the world.',wikiTitle:'Salar Jung Museum'},
+  ],
+  pondicherry: [
+    {name:'Promenade Beach',lat:11.9327,lon:79.8369,type:'beach',description:'1.5 km rocky beach along the Bay of Bengal in the French Quarter.',wikiTitle:'Promenade Beach'},
+    {name:'Auroville',lat:12.0063,lon:79.8108,type:'attraction',description:'Experimental universal township with the iconic golden Matrimandir.',wikiTitle:'Auroville'},
+    {name:'French Quarter',lat:11.9340,lon:79.8370,type:'historic',description:'Charming colonial area with French architecture, cafes, and boutiques.',wikiTitle:'White Town, Pondicherry'},
+    {name:'Paradise Beach',lat:11.9008,lon:79.8369,type:'beach',description:'Secluded golden sand beach accessible only by boat.',wikiTitle:'Paradise Beach, Pondicherry'},
+    {name:'Sri Aurobindo Ashram',lat:11.9353,lon:79.8365,type:'temple',description:'Spiritual community founded by Sri Aurobindo and The Mother.',wikiTitle:'Sri Aurobindo Ashram'},
+  ],
+  kochi: [
+    {name:'Fort Kochi',lat:9.9638,lon:76.2432,type:'historic',description:'Historic area with colonial architecture, churches, and Chinese fishing nets.',wikiTitle:'Fort Kochi'},
+    {name:'Chinese Fishing Nets',lat:9.9676,lon:76.2279,type:'attraction',description:'Iconic cantilevered fishing nets introduced by Chinese explorers.',wikiTitle:'Chinese fishing nets'},
+    {name:'Mattancherry Palace',lat:9.9582,lon:76.2597,type:'palace',description:'Dutch Palace with stunning Kerala murals depicting Hindu temple art.',wikiTitle:'Mattancherry Palace'},
+    {name:'St. Francis Church',lat:9.9641,lon:76.2418,type:'historic',description:'Oldest European church in India, originally built in 1503.',wikiTitle:"St. Francis Church, Kochi"},
+    {name:'Jew Town Kochi',lat:9.9572,lon:76.2602,type:'market',description:'Historic area with a 16th-century synagogue and antique shops.',wikiTitle:'Paradesi Synagogue'},
+  ],
+}
+
 async function geocode(place: string): Promise<{lat:number,lon:number,name:string}> {
   const key = place.toLowerCase().trim().replace(/[,.\-]/g,'').replace(/\s+/g,' ')
   for (const [city, [lat,lon]] of Object.entries(CITY_COORDS)) {
@@ -130,48 +250,73 @@ async function geocode(place: string): Promise<{lat:number,lon:number,name:strin
 
 async function fetchAttractions(lat: number, lon: number, city: string, days: number): Promise<any[]> {
   const needed = days * 5
-  const types = ['tourism','historic','museum','place_of_worship','park','beach','viewpoint','memorial','castle','monument','attraction','artwork','gallery','zoo','theme_park','water_park','garden','ruins']
-  const radius = Math.min(25000, 8000 + days * 3000)
-  const query = `[out:json][timeout:25];(node(around:${radius},${lat},${lon})[tourism~"^(${types.join('|')})$"];node(around:${radius},${lat},${lon})[historic];node(around:${radius},${lat},${lon})[leisure~"^(park|garden|nature_reserve|beach_resort)$"];way(around:${radius},${lat},${lon})[tourism~"^(${types.join('|')})$"];);out center 80;`
+  const cityKey = city.toLowerCase().trim().replace(/[^a-z]/g,'')
   
-  const places: any[] = []
-  try {
-    const r = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:`data=${encodeURIComponent(query)}`, headers:{'Content-Type':'application/x-www-form-urlencoded','User-Agent':'SmartRouteSRMIST/3.0'}})
-    const d: any = await r.json()
-    const seen = new Set<string>()
-    for (const el of (d.elements||[])) {
-      const tags = el.tags || {}
-      const name = tags.name || tags['name:en'] || ''
-      if (!name || name.length < 3) continue
-      const nKey = name.toLowerCase().replace(/\s+/g,'')
-      if (seen.has(nKey)) continue
-      seen.add(nKey)
-      const plat = el.lat || el.center?.lat
-      const plon = el.lon || el.center?.lon
-      if (!plat || !plon) continue
-      const ptype = tags.tourism || tags.historic || tags.leisure || 'attraction'
-      places.push({
-        name, lat: plat, lon: plon, type: ptype,
-        description: tags.description || tags['description:en'] || `${ptype.replace(/_/g,' ')} in ${city}`,
-        wikiTitle: tags.wikipedia?.split(':')[1] || tags.wikidata || '',
-        opening_hours: tags.opening_hours || '',
-        phone: tags.phone || '',
-        website: tags.website || '',
-        wheelchair: tags.wheelchair || '',
-        fee: tags.fee || '',
-      })
-      if (places.length >= needed + 10) break
+  // 1. Start with curated top attractions for known cities
+  let places: any[] = []
+  for (const [key, attractions] of Object.entries(CITY_TOP_ATTRACTIONS)) {
+    if (cityKey.includes(key) || key.includes(cityKey)) {
+      places = [...attractions]
+      break
     }
-  } catch(e) { console.error('Overpass error:', e) }
+  }
+  
+  // 2. Supplement with Overpass API for additional/unknown cities
+  if (places.length < needed) {
+    const radius = Math.min(30000, 10000 + days * 3000)
+    // Improved Overpass query: target only major tourist attractions with names
+    const query = `[out:json][timeout:25];(
+      node(around:${radius},${lat},${lon})[tourism~"^(attraction|museum|gallery|viewpoint|zoo|theme_park|artwork)$"]["name"];
+      node(around:${radius},${lat},${lon})[tourism="yes"]["name"];
+      node(around:${radius},${lat},${lon})[historic~"^(monument|memorial|castle|fort|ruins|archaeological_site|palace)$"]["name"];
+      node(around:${radius},${lat},${lon})[amenity="place_of_worship"]["name"]["tourism"];
+      node(around:${radius},${lat},${lon})[leisure~"^(park|garden|nature_reserve|beach_resort)$"]["name"];
+      way(around:${radius},${lat},${lon})[tourism~"^(attraction|museum|gallery|viewpoint)$"]["name"];
+      way(around:${radius},${lat},${lon})[historic~"^(monument|memorial|castle|fort|ruins|palace)$"]["name"];
+    );out center 60;`
+    
+    try {
+      const r = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:`data=${encodeURIComponent(query)}`, headers:{'Content-Type':'application/x-www-form-urlencoded','User-Agent':'SmartRouteSRMIST/3.0'}})
+      const d: any = await r.json()
+      const seen = new Set<string>(places.map(p => p.name.toLowerCase().replace(/\s+/g,'')))
+      for (const el of (d.elements||[])) {
+        const tags = el.tags || {}
+        const name = tags['name:en'] || tags.name || ''
+        if (!name || name.length < 3) continue
+        const nKey = name.toLowerCase().replace(/\s+/g,'')
+        if (seen.has(nKey)) continue
+        // Filter out generic/irrelevant items: street names, person names (George V, etc.)
+        if (/^(statue|bust|plaque|bench|sign|information|george|king|queen|prince|princess|memorial (to|of)|tomb of unknown)/i.test(name)) continue
+        if (name.length < 5 && !tags.tourism) continue // skip very short generic names
+        seen.add(nKey)
+        const plat = el.lat || el.center?.lat
+        const plon = el.lon || el.center?.lon
+        if (!plat || !plon) continue
+        const ptype = tags.tourism || tags.historic || tags.leisure || 'attraction'
+        places.push({
+          name, lat: plat, lon: plon, type: ptype,
+          description: tags.description || tags['description:en'] || `${ptype.replace(/_/g,' ')} in ${city}`,
+          wikiTitle: tags.wikipedia?.split(':')[1] || tags.wikidata || name,
+          opening_hours: tags.opening_hours || '',
+          phone: tags.phone || '',
+          website: tags.website || '',
+          wheelchair: tags.wheelchair || '',
+          fee: tags.fee || '',
+        })
+        if (places.length >= needed + 10) break
+      }
+    } catch(e) { console.error('Overpass error:', e) }
+  }
 
-  // Supplement with OpenTripMap
+  // 3. Supplement with OpenTripMap if still short
   if (places.length < needed) {
     try {
-      const r2 = await fetch(`https://api.opentripmap.com/0.1/en/places/radius?radius=${radius}&lon=${lon}&lat=${lat}&kinds=interesting_places,cultural,historic,natural,architecture&format=json&limit=${needed - places.length + 5}&apikey=5ae2e3f221c38a28845f05b6aec53ea2b07e9e48b7f89b38bd76ca73`)
+      const radius2 = Math.min(30000, 10000 + days * 3000)
+      const r2 = await fetch(`https://api.opentripmap.com/0.1/en/places/radius?radius=${radius2}&lon=${lon}&lat=${lat}&kinds=interesting_places,cultural,historic,natural,architecture&format=json&limit=${needed - places.length + 5}&rate=3&apikey=5ae2e3f221c38a28845f05b6aec53ea2b07e9e48b7f89b38bd76ca73`)
       const otm: any = await r2.json()
       const seen2 = new Set(places.map(p => p.name.toLowerCase().replace(/\s+/g,'')))
       for (const p of (otm||[])) {
-        if (!p.name || p.name.length < 3) continue
+        if (!p.name || p.name.length < 4) continue
         const nKey = p.name.toLowerCase().replace(/\s+/g,'')
         if (seen2.has(nKey)) continue
         seen2.add(nKey)
@@ -179,7 +324,7 @@ async function fetchAttractions(lat: number, lon: number, city: string, days: nu
           name: p.name, lat: p.point?.lat||lat, lon: p.point?.lon||lon,
           type: p.kinds?.split(',')[0] || 'attraction',
           description: `${p.kinds?.split(',')[0]?.replace(/_/g,' ') || 'attraction'} in ${city}`,
-          wikiTitle: p.wikipedia || '', rating: p.rate || 0,
+          wikiTitle: p.wikipedia || p.name, rating: p.rate || 0,
         })
         if (places.length >= needed + 5) break
       }
@@ -212,12 +357,25 @@ async function fetchWeather(lat: number, lon: number, days: number): Promise<any
 }
 
 async function fetchWikiPhoto(name: string): Promise<string> {
+  // Try exact title first, then search
+  const attempts = [name, name.replace(/\s+(temple|fort|beach|palace|museum|church|mosque|garden|park|lake)/i, ' ($1)')]
+  for (const title of attempts) {
+    try {
+      const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&titles=${encodeURIComponent(title)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&origin=*`)
+      const d: any = await r.json()
+      const pages = d?.query?.pages || {}
+      for (const p of Object.values(pages) as any[]) {
+        if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg') && !p.thumbnail.source.includes('Flag_of')) return p.thumbnail.source
+      }
+    } catch(e) {}
+  }
+  // Try Wikipedia search API as fallback
   try {
-    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&titles=${encodeURIComponent(name)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&origin=*`)
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=3&prop=pageimages&piprop=thumbnail&pithumbsize=600&origin=*`)
     const d: any = await r.json()
     const pages = d?.query?.pages || {}
     for (const p of Object.values(pages) as any[]) {
-      if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg')) return p.thumbnail.source
+      if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg') && !p.thumbnail.source.includes('Flag_of')) return p.thumbnail.source
     }
   } catch(e) {}
   return ''
@@ -254,7 +412,7 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
         description: place.description, time: `${String(Math.floor(startHour)).padStart(2,'0')}:${startHour%1?'30':'00'}`,
         duration: `${duration}h`, cost, crowd_level: crowd,
         weather_safe: weatherSafe, weather_warning: !weatherSafe ? `⚠️ ${w.icon} Weather risk` : '',
-        wikiTitle: place.wikiTitle, opening_hours: place.opening_hours || '',
+        wikiTitle: place.wikiTitle || place.name, opening_hours: place.opening_hours || '',
         phone: place.phone || '', website: place.website || '', wheelchair: place.wheelchair || '',
         rating: place.rating || (3.5 + Math.random()*1.5),
         notes: '', // User can add notes per activity
@@ -332,67 +490,178 @@ async function buildMultiCityTrip(cities: string[], daysPerCity: number[], total
 }
 
 // ============================================
-// BOOKING ENGINE
+// BOOKING ENGINE — Realistic Prices & Real Links
 // ============================================
-function generateFlights(origin: string, dest: string, date: string): any[] {
-  const airlines = ['Air India','IndiGo','SpiceJet','Vistara','GoFirst','AirAsia India','Akasa Air']
-  const results: any[] = []
-  for (let i = 0; i < 6; i++) {
-    const airline = airlines[Math.floor(Math.random()*airlines.length)]
-    const price = Math.round(2000 + Math.random()*8000)
-    const depH = 5 + Math.floor(Math.random()*16), depM = Math.random()>0.5?'00':'30'
-    const durH = 1 + Math.floor(Math.random()*4), durM = Math.random()>0.5?'15':'45'
-    results.push({
-      id: `FL${Date.now()}${i}`, airline, flight_no: `${airline.substring(0,2).toUpperCase()}${100+Math.floor(Math.random()*900)}`,
-      departure: `${String(depH).padStart(2,'0')}:${depM}`, arrival: `${String(depH+durH).padStart(2,'0')}:${durM}`,
-      duration: `${durH}h ${durM}m`, price, currency: '₹',
-      class: i<2?'Economy':i<4?'Premium Economy':'Business',
-      stops: Math.random()>0.7?1:0,
-      bookingUrl: `https://www.google.com/travel/flights?q=flights+from+${encodeURIComponent(origin)}+to+${encodeURIComponent(dest)}`,
-      rating: (3.5 + Math.random()*1.5).toFixed(1),
-    })
+
+// Approximate distances between major Indian cities (km) for price estimation
+const CITY_DISTANCES: Record<string, Record<string, number>> = {
+  chennai: {delhi:2180,mumbai:1340,jaipur:2000,goa:600,bangalore:350,hyderabad:630,kolkata:1660,agra:2100,varanasi:1680,udaipur:1670,kochi:600,shimla:2550,manali:2700,pondicherry:150,amritsar:2600,jodhpur:1950,leh:3200,darjeeling:1900,ooty:280,mysore:480,mahabalipuram:60,madurai:460,thanjavur:340,kodaikanal:430,rishikesh:2350,hampi:580,munnar:500,alleppey:640,tirupati:140,srinagar:3100},
+  delhi: {mumbai:1400,jaipur:280,goa:1900,bangalore:2150,hyderabad:1500,kolkata:1500,agra:230,varanasi:820,udaipur:670,kochi:2700,shimla:350,manali:530,chennai:2180,pondicherry:2300,amritsar:470,jodhpur:590,leh:1000,darjeeling:1550,rishikesh:250,haridwar:220,srinagar:850},
+  mumbai: {jaipur:1150,goa:590,bangalore:980,hyderabad:710,kolkata:2050,agra:1220,varanasi:1330,udaipur:660,kochi:1500,delhi:1400,chennai:1340,pondicherry:1490,amritsar:1840,jodhpur:830,shimla:1750,manali:1850},
+  bangalore: {mysore:150,ooty:275,kochi:550,chennai:350,hyderabad:570,goa:560,mumbai:980,hampi:340,coorg:250},
+  kolkata: {darjeeling:600,gangtok:640,varanasi:680,delhi:1500,chennai:1660,mumbai:2050},
+}
+
+function getDistance(origin: string, dest: string): number {
+  const oKey = origin.toLowerCase().replace(/[^a-z]/g,'')
+  const dKey = dest.toLowerCase().replace(/[^a-z]/g,'')
+  for (const [city, dists] of Object.entries(CITY_DISTANCES)) {
+    if (oKey.includes(city) || city.includes(oKey)) {
+      for (const [d, km] of Object.entries(dists)) {
+        if (dKey.includes(d) || d.includes(dKey)) return km
+      }
+    }
   }
-  return results.sort((a,b) => a.price-b.price)
+  // Fallback: rough estimate based on coordinates
+  return 800 + Math.floor(Math.random() * 500)
+}
+
+function generateFlights(origin: string, dest: string, date: string): any[] {
+  const dist = getDistance(origin, dest)
+  const airlines = [
+    {name:'IndiGo',code:'6E',base:1.8,rating:4.0},
+    {name:'Air India',code:'AI',base:2.2,rating:3.8},
+    {name:'Vistara',code:'UK',base:2.5,rating:4.3},
+    {name:'SpiceJet',code:'SG',base:1.6,rating:3.6},
+    {name:'AirAsia India',code:'I5',base:1.5,rating:3.7},
+    {name:'Akasa Air',code:'QP',base:1.7,rating:4.1},
+  ]
+  const searchUrl = `https://www.google.com/travel/flights?q=flights+from+${encodeURIComponent(origin)}+to+${encodeURIComponent(dest)}${date ? `+on+${date}` : ''}`
+  
+  return airlines.map((airline, i) => {
+    const basePrice = Math.round(dist * airline.base + 500 + (Math.random() * 400 - 200))
+    const flightNo = `${airline.code}-${100 + Math.floor(Math.random()*900)}`
+    const depH = [6,7,8,10,14,17,20][i % 7]
+    const durH = Math.max(1, Math.round(dist / 700))
+    const durM = Math.random() > 0.5 ? 15 : 45
+    const isNonstop = dist < 1500
+    const classes = [
+      {type:'Economy',multiplier:1},
+      {type:'Premium Economy',multiplier:1.6},
+      {type:'Business',multiplier:3},
+    ]
+    const cls = classes[i < 3 ? 0 : i < 5 ? 1 : 2]
+    const price = Math.round(basePrice * cls.multiplier)
+    
+    return {
+      id: `FL${Date.now()}${i}`, airline: airline.name, flight_no: flightNo,
+      departure: `${String(depH).padStart(2,'0')}:${Math.random()>0.5?'00':'30'}`,
+      arrival: `${String((depH+durH)%24).padStart(2,'0')}:${durM>30?'45':'15'}`,
+      duration: `${durH}h ${durM}m`, price, currency: '₹',
+      class: cls.type,
+      stops: isNonstop ? 0 : (Math.random() > 0.6 ? 1 : 0),
+      bookingUrl: searchUrl,
+      rating: airline.rating.toFixed(1),
+      bookingPlatforms: [
+        {name:'Google Flights', url: searchUrl},
+        {name:'MakeMyTrip', url: `https://www.makemytrip.com/flight/search?fromCity=${encodeURIComponent(origin)}&toCity=${encodeURIComponent(dest)}`},
+        {name:'Skyscanner', url: `https://www.skyscanner.co.in/transport/flights/${encodeURIComponent(origin)}/${encodeURIComponent(dest)}/`},
+      ]
+    }
+  }).sort((a,b) => a.price - b.price)
 }
 
 function generateTrains(origin: string, dest: string): any[] {
-  const types = ['Rajdhani Express','Shatabdi Express','Duronto Express','Garib Rath','Jan Shatabdi','Tejas Express','Vande Bharat']
-  const results: any[] = []
-  for (let i = 0; i < 5; i++) {
-    const type = types[Math.floor(Math.random()*types.length)]
-    const price = Math.round(300 + Math.random()*3000)
-    results.push({
-      id: `TR${Date.now()}${i}`, train_name: type,
-      train_no: `${10000+Math.floor(Math.random()*90000)}`,
-      departure: `${String(5+Math.floor(Math.random()*18)).padStart(2,'0')}:${Math.random()>0.5?'00':'30'}`,
-      duration: `${3+Math.floor(Math.random()*12)}h`, price, currency: '₹',
-      class: ['1A','2A','3A','SL'][Math.floor(Math.random()*4)],
-      bookingUrl: `https://www.irctc.co.in`,
-    })
-  }
-  return results.sort((a,b) => a.price-b.price)
+  const dist = getDistance(origin, dest)
+  const irctcUrl = `https://www.irctc.co.in/nget/train-search`
+  const trainTypes = [
+    {name:'Rajdhani Express',code:'RAJ',speedKmh:100,base:1.5,classes:['1A','2A','3A']},
+    {name:'Shatabdi Express',code:'SHT',speedKmh:90,base:1.2,classes:['CC','EC']},
+    {name:'Vande Bharat Express',code:'VBE',speedKmh:130,base:1.8,classes:['CC','EC']},
+    {name:'Duronto Express',code:'DUR',speedKmh:85,base:1.3,classes:['1A','2A','3A','SL']},
+    {name:'Garib Rath',code:'GR',speedKmh:75,base:0.7,classes:['3A','SL']},
+    {name:'Superfast Express',code:'SF',speedKmh:70,base:0.8,classes:['2A','3A','SL']},
+  ]
+  const confirmtktUrl = `https://www.confirmtkt.com/train-search?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`
+  
+  return trainTypes.filter(t => {
+    if (dist < 300 && t.code === 'RAJ') return false
+    if (dist > 1500 && t.code === 'SHT') return false
+    return true
+  }).map((train, i) => {
+    const durH = Math.max(2, Math.round(dist / train.speedKmh))
+    const cls = train.classes[0]
+    const classMultipliers: Record<string,number> = {'1A':3.5,'2A':2.2,'3A':1.5,'SL':0.7,'CC':1.8,'EC':2.5}
+    const price = Math.round(dist * train.base * (classMultipliers[cls] || 1))
+    const depH = [5,6,8,15,17,20][i % 6]
+    
+    return {
+      id: `TR${Date.now()}${i}`, train_name: train.name,
+      train_no: `${10000+Math.floor(Math.random()*89999)}`,
+      departure: `${String(depH).padStart(2,'0')}:${Math.random()>0.5?'00':'30'}`,
+      duration: `${durH}h ${Math.random()>0.5?'00':'30'}m`, price, currency: '₹',
+      class: cls,
+      bookingUrl: irctcUrl,
+      bookingPlatforms: [
+        {name:'IRCTC', url: irctcUrl},
+        {name:'ConfirmTkt', url: confirmtktUrl},
+        {name:'RailYatri', url: `https://www.railyatri.in/booking/search?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
+      ]
+    }
+  }).sort((a,b) => a.price - b.price)
 }
 
 function generateHotels(city: string, days: number, persona: string): any[] {
-  const names = [`Grand ${city} Palace`,`${city} Heritage Inn`,`The Royal ${city}`,`${city} Comfort Suites`,`Backpacker's ${city}`,`${city} Luxury Resort`,`Treebo ${city} Central`,`OYO ${city} Premium`,`Taj ${city}`,`ITC ${city}`]
-  return names.slice(0,6).map((name,i) => ({
-    id: `HT${Date.now()}${i}`, name, stars: 3+Math.floor(Math.random()*3),
-    price_per_night: Math.round(persona==='luxury'?5000+Math.random()*15000:800+Math.random()*3000),
-    total_price: Math.round((persona==='luxury'?5000+Math.random()*15000:800+Math.random()*3000)*days),
-    rating: (3.5+Math.random()*1.5).toFixed(1), amenities: ['WiFi','AC','Breakfast','Pool','Gym','Spa'].slice(0,3+Math.floor(Math.random()*3)),
-    bookingUrl: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(city)}`,
-    image: '', currency: '₹',
-  })).sort((a,b) => a.price_per_night-b.price_per_night)
+  const budget_hotels = [
+    {name:`OYO Rooms ${city}`,stars:2,basePrice:600,rating:3.4,amenities:['WiFi','AC']},
+    {name:`Treebo ${city} Central`,stars:3,basePrice:900,rating:3.7,amenities:['WiFi','AC','Breakfast']},
+    {name:`FabHotel ${city}`,stars:3,basePrice:800,rating:3.5,amenities:['WiFi','AC','Parking']},
+  ]
+  const mid_hotels = [
+    {name:`Lemon Tree ${city}`,stars:3,basePrice:2500,rating:4.0,amenities:['WiFi','AC','Breakfast','Pool','Gym']},
+    {name:`Radisson ${city}`,stars:4,basePrice:4000,rating:4.2,amenities:['WiFi','AC','Breakfast','Pool','Gym','Spa']},
+    {name:`Novotel ${city}`,stars:4,basePrice:3500,rating:4.1,amenities:['WiFi','AC','Breakfast','Pool','Restaurant']},
+  ]
+  const luxury_hotels = [
+    {name:`Taj ${city}`,stars:5,basePrice:8000,rating:4.7,amenities:['WiFi','AC','Breakfast','Pool','Gym','Spa','Restaurant','Bar','Concierge']},
+    {name:`ITC ${city}`,stars:5,basePrice:7000,rating:4.6,amenities:['WiFi','AC','Breakfast','Pool','Gym','Spa','Restaurant']},
+    {name:`The Leela ${city}`,stars:5,basePrice:9000,rating:4.8,amenities:['WiFi','AC','Breakfast','Pool','Gym','Spa','Butler']},
+  ]
+  
+  let hotels = persona === 'luxury' ? [...luxury_hotels, ...mid_hotels] : persona === 'adventure' ? [...budget_hotels, ...mid_hotels] : [...budget_hotels, ...mid_hotels, ...luxury_hotels.slice(0,1)]
+  
+  const searchUrl = `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(city)}&checkin=${new Date().toISOString().split('T')[0]}&checkout=${new Date(Date.now()+days*86400000).toISOString().split('T')[0]}`
+  
+  return hotels.map((h, i) => {
+    const priceVariation = 0.8 + Math.random() * 0.4
+    const ppn = Math.round(h.basePrice * priceVariation)
+    return {
+      id: `HT${Date.now()}${i}`, name: h.name, stars: h.stars,
+      price_per_night: ppn,
+      total_price: ppn * days,
+      rating: h.rating.toFixed(1), amenities: h.amenities,
+      bookingUrl: searchUrl,
+      bookingPlatforms: [
+        {name:'Booking.com', url: searchUrl},
+        {name:'MakeMyTrip', url: `https://www.makemytrip.com/hotels/hotel-listing?city=${encodeURIComponent(city)}`},
+        {name:'Goibibo', url: `https://www.goibibo.com/hotels/hotels-in-${city.toLowerCase().replace(/\s+/g,'-')}/`},
+      ],
+      image: '', currency: '₹',
+    }
+  }).sort((a,b) => a.price_per_night - b.price_per_night)
 }
 
 function generateCabs(city: string): any[] {
-  return ['Ola','Uber','Rapido','Meru Cabs','BluSmart'].map((name,i) => ({
-    id: `CB${Date.now()}${i}`, provider: name,
-    type: ['Mini','Sedan','SUV','Auto','Bike'][i],
-    price_per_km: Math.round(8+Math.random()*12),
-    base_fare: Math.round(50+Math.random()*100),
-    bookingUrl: name==='Ola'?'https://www.olacabs.com':name==='Uber'?'https://www.uber.com':'https://www.google.com/maps',
-  }))
+  const providers = [
+    {name:'Ola',types:[{type:'Micro',baseFare:40,perKm:7},{type:'Mini',baseFare:60,perKm:9},{type:'Sedan',baseFare:90,perKm:12},{type:'SUV',baseFare:120,perKm:15}],url:'https://www.olacabs.com'},
+    {name:'Uber',types:[{type:'UberGo',baseFare:50,perKm:8},{type:'Uber Premier',baseFare:80,perKm:11},{type:'UberXL',baseFare:110,perKm:14},{type:'Auto',baseFare:25,perKm:5}],url:'https://www.uber.com'},
+    {name:'Rapido',types:[{type:'Bike',baseFare:15,perKm:4},{type:'Auto',baseFare:25,perKm:5}],url:'https://www.rapido.bike'},
+  ]
+  
+  const results: any[] = []
+  for (const prov of providers) {
+    for (const t of prov.types) {
+      results.push({
+        id: `CB${Date.now()}${results.length}`, provider: prov.name,
+        type: t.type,
+        price_per_km: t.perKm,
+        base_fare: t.baseFare,
+        bookingUrl: prov.url,
+        estimated_10km: t.baseFare + t.perKm * 10,
+      })
+    }
+  }
+  return results.sort((a,b) => a.estimated_10km - b.estimated_10km)
 }
 
 function generateRestaurants(city: string, lat: number, lon: number): any[] {
