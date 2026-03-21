@@ -172,6 +172,30 @@
             </div>
         </div>
 
+        <!-- Smart AI Suggestions Banner -->
+        <div class="panel smart-suggestions-panel" id="smartSuggestionsPanel" style="display:none">
+            <div class="panel-title"><i class="fas fa-robot"></i> AI Smart Suggestions</div>
+            <div class="smart-suggestions-grid" id="smartSuggestionsGrid"></div>
+        </div>
+
+        <!-- Trip Countdown & Quick Stats -->
+        <div class="panel trip-countdown-panel" id="tripCountdownPanel" style="display:none">
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <div class="countdown-box">
+                <div class="countdown-value" id="countdownDays">--</div>
+                <div class="countdown-label">days to go</div>
+              </div>
+              <div style="flex:1;min-width:200px">
+                <div class="trip-quick-stats" id="tripQuickStats"></div>
+              </div>
+              <div class="trip-actions-mini">
+                <button class="btn btn-sm btn-primary" onclick="exportPDF()"><i class="fas fa-file-pdf"></i> PDF</button>
+                <button class="btn btn-sm" onclick="shareTrip()"><i class="fas fa-share-alt"></i> Share</button>
+                <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:#ef4444" onclick="emergencyReplan()"><i class="fas fa-bolt"></i> Replan</button>
+              </div>
+            </div>
+        </div>
+
         <!-- Booking Wizard -->
         <div class="agentic-wizard" id="agenticWizard" style="display:none">
             <div class="wizard-progress" id="wizardProgress">
@@ -356,6 +380,53 @@
             <div id="pomdpPanel" class="text-sm text-muted">Belief updates appear after rating...</div>
         </div>
 
+        <!-- Smart Automations Panel -->
+        <div class="panel" id="automationsPanel">
+            <div class="panel-title"><i class="fas fa-magic"></i> Smart Automations</div>
+            <div class="auto-actions">
+              <button class="btn btn-sm auto-btn" onclick="autoOptimizeRoute()" title="AI re-orders your itinerary to minimize travel time">
+                <i class="fas fa-route"></i> Optimize Route
+              </button>
+              <button class="btn btn-sm auto-btn" onclick="autoBalanceBudget()" title="Redistribute budget across days for best value">
+                <i class="fas fa-balance-scale"></i> Balance Budget
+              </button>
+              <button class="btn btn-sm auto-btn" onclick="autoWeatherSwap()" title="Swap outdoor activities on rainy days with indoor alternatives">
+                <i class="fas fa-cloud-sun-rain"></i> Weather Swap
+              </button>
+              <button class="btn btn-sm auto-btn" onclick="autoAvoidCrowds()" title="Reorder activities to visit popular spots at low-crowd times">
+                <i class="fas fa-user-clock"></i> Avoid Crowds
+              </button>
+              <button class="btn btn-sm auto-btn" onclick="autoSuggestFood()" title="Insert top-rated food stops between activities">
+                <i class="fas fa-utensils"></i> Add Food Stops
+              </button>
+              <button class="btn btn-sm auto-btn" onclick="autoGenerateChecklist()" title="Generate a pre-trip checklist with deadlines">
+                <i class="fas fa-tasks"></i> Pre-Trip Checklist
+              </button>
+            </div>
+            <div id="autoResult" class="auto-result" style="display:none"></div>
+        </div>
+
+        <!-- Travel Readiness Score -->
+        <div class="panel" id="readinessPanel">
+            <div class="panel-title"><i class="fas fa-clipboard-check"></i> Travel Readiness</div>
+            <div class="readiness-score" id="readinessScore">
+              <div class="readiness-ring" id="readinessRing">
+                <svg viewBox="0 0 36 36" class="readiness-svg">
+                  <path class="readiness-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                  <path class="readiness-fill" id="readinessFill" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                  <text x="18" y="20.35" class="readiness-text" id="readinessPercent">0%</text>
+                </svg>
+              </div>
+              <div class="readiness-items" id="readinessItems">
+                <div class="readiness-item" data-ready="false"><i class="far fa-circle"></i> Generate itinerary</div>
+                <div class="readiness-item" data-ready="false"><i class="far fa-circle"></i> Book transport</div>
+                <div class="readiness-item" data-ready="false"><i class="far fa-circle"></i> Book accommodation</div>
+                <div class="readiness-item" data-ready="false"><i class="far fa-circle"></i> Pack essentials</div>
+                <div class="readiness-item" data-ready="false"><i class="far fa-circle"></i> Check weather</div>
+              </div>
+            </div>
+        </div>
+
         <!-- Trip Journal -->
         <div class="panel">
             <div class="panel-title"><i class="fas fa-book"></i> Trip Journal</div>
@@ -378,7 +449,7 @@
                 <div class="atlas-stat"><span class="stat-value" id="totalDistance">0</span><span class="stat-label">km Traveled</span></div>
             </div>
         </div>
-        <div id="atlasMap" style="height:500px;border-radius:var(--radius);overflow:hidden"></div>
+        <div id="atlasMap" style="height:500px;border-radius:var(--radius);overflow:hidden;background:#f2f3f5"></div>
         <div class="atlas-legend" id="atlasLegend"></div>
     </div>
 </div>
@@ -643,13 +714,6 @@
         <button class="btn-icon" onclick="toggleChatbot()" style="width:30px;height:30px"><i class="fas fa-times"></i></button>
     </div>
     <div class="chatbot-messages" id="chatMessages">
-        <div class="chat-msg bot"><div class="chat-msg-avatar">🧠</div>
-            <div class="chat-msg-bubble">Hi! I'm your SmartRoute AI assistant. Ask me about:
-                <ul style="margin:6px 0 0 16px;font-size:0.82rem">
-                    <li>🗺️ Place suggestions</li><li>🍽️ Food recommendations</li><li>💰 Budget tips</li><li>🌦️ Weather forecasts</li><li>🗣️ Language phrases</li><li>🛡️ Safety tips</li>
-                </ul>
-            </div>
-        </div>
     </div>
     <div class="chatbot-suggestions" id="chatSuggestions">
         <button onclick="sendSuggestion('Suggest places nearby')">📍 Nearby</button>

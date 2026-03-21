@@ -1549,57 +1549,128 @@ app.post('/api/chat', async (c) => {
   if (!message?.trim()) return c.json({success:false, response:'Please type a message!'})
   
   const lower = message.toLowerCase().trim()
-  const dest = context?.destination || 'your destination'
+  const dest = context?.destination || ''
+  const origin = context?.origin || ''
+  const budgetCtx = context?.budget || 15000
   let response = ''
   
-  // Trip planning intent — trigger actual trip generation
-  if (/plan\s+(a\s+)?trip\s+to|travel\s+to|visit\s+to|going\s+to|trip\s+for/i.test(lower)) {
-    const match = lower.match(/(?:to|for|visit)\s+([a-z\s]+?)(?:\s+for|\s+in|\s+with|\s*$)/i)
+  // 1. Trip planning intent — detailed response with actionable steps
+  if (/plan\s+(a\s+)?trip\s+to|travel\s+to|visit\s+to|going\s+to|trip\s+for|want\s+to\s+go|take\s+me\s+to|itinerary\s+for/i.test(lower)) {
+    const match = lower.match(/(?:to|for|visit|go)\s+([a-z\s]+?)(?:\s+for|\s+in|\s+with|\s*$)/i)
     const place = match?.[1]?.trim() || ''
     if (place) {
-      response = `🗺️ **Great choice!** I'd love to help you plan a trip to **${place.charAt(0).toUpperCase()+place.slice(1)}**!\n\nHere's what I recommend:\n1. Enter **"${place}"** in the destination field above\n2. Set your budget and duration\n3. Click **"Generate AI Trip"**\n\nMy 7 AI agents will create a personalized itinerary with:\n- 🏛️ Top attractions ranked by Bayesian preferences\n- 🌦️ Weather-adjusted scheduling\n- 💰 Budget-optimized activities\n- 🔗 Real booking links for flights, trains & hotels\n\nWant me to tell you the best time to visit ${place}?`
+      const cap = place.charAt(0).toUpperCase() + place.slice(1)
+      response = `🗺️ **Planning your trip to ${cap}!**\n\nHere's what to do:\n1. Enter **"${place}"** in the Destination field\n2. Set your budget and number of days\n3. Click **Generate AI Trip**\n\nMy 7 AI agents will create a personalized itinerary with:\n- 🏛️ Top attractions ranked by your preferences\n- 🌦️ Weather-adjusted scheduling\n- 💰 Budget-optimized activities\n- 🔗 Booking links for flights, trains & hotels\n\n**Pro tip:** After generating, use the ⚡ Smart Automations panel to optimize your route, balance budget, and avoid crowds automatically!`
     } else {
-      response = `🗺️ I'd love to help! Where do you want to go? Try saying:\n- "Plan a trip to Jaipur"\n- "Plan a trip to SRM Trichy campus"\n- "Plan a trip to Manali for 5 days"`
+      response = `🗺️ I'd love to help you plan! Where do you want to go?\n\nTry:\n- "Plan a trip to Jaipur"\n- "Plan a trip to Manali for 5 days"\n- "Plan a trip to SRM Trichy campus"\n\nOr click **Help Me Choose** for AI destination recommendations!`
     }
-  } else if (/^(hello|hi|hey|namaste|howdy|sup)\b|good\s+(morning|afternoon|evening)/i.test(lower)) {
-    response = `👋 **Namaste! Welcome to SmartRoute SRMIST!**\n\nI'm your AI travel assistant powered by **7 intelligent agents** using:\n🧠 Q-Learning · MCTS · Bayesian Thompson Sampling · POMDP · Naive Bayes\n\nI can help you with:\n• 🗺️ **"Plan a trip to Goa"** — full AI-powered itinerary\n• 🌦️ **"Weather in Mumbai"** — forecasts & risk analysis\n• 💰 **"Budget tips for Jaipur"** — save money smartly\n• 🍽️ **"Best food in Chennai"** — restaurant recommendations\n• 🛡️ **"Safety tips"** — emergency contacts & advice\n• 🏫 **"Trip near SRM Trichy"** — campus-area exploration\n• ✈️ **"Flights from Delhi to Goa"** — booking links\n• 🧳 **"What to pack?"** — AI packing list\n\nJust type anything and I'll help! 😊`
-  } else if (/weather|forecast|rain|temperature|hot|cold/i.test(lower)) {
-    response = `🌦️ **Weather Analysis for ${dest}:**\n\nThe AI Weather Agent uses **Naive Bayes classification** with Gaussian likelihoods:\n- P(sunny|features) based on temperature, humidity, cloud cover, precipitation\n- Classification: P(class|features) ∝ P(features|class) × P(class)\n\n**What I check:**\n☀️ Solar radiation & UV index\n🌡️ Temperature range (min/max)\n💧 Precipitation probability\n💨 Wind speed & direction\n\n**Risk Levels:** Low (green) → Medium (yellow) → High (red)\n\n💡 **Tip:** If high-risk weather is detected, use the **Emergency Replan** button to automatically swap outdoor activities for indoor alternatives!\n\nGenerate your trip to see day-by-day weather forecasts!`
-  } else if (/budget|cheap|save|money|cost|expensive|afford/i.test(lower)) {
-    response = `💰 **Budget Optimization Tips for ${dest}:**\n\n**Smart Saving Strategies:**\n🚂 Book trains 30 days ahead on IRCTC (save 40-60% vs flights)\n🏨 Use OYO/Treebo for ₹600-1500/night budget stays\n🍽️ Eat at local dhabas and street food stalls (₹50-150/meal)\n🚌 Use public transport, metro, or shared cabs\n🆓 Visit free attractions — temples, parks, beaches, ghats\n📱 Use apps: MakeMyTrip, ixigo, Cleartrip for deals\n\n**How AI Optimizes Your Budget:**\nThe Budget Agent uses an MDP reward function:\nR = 0.4×(rating/5) + 0.3×(budget_adherence) + 0.2×(weather) − 0.1×(crowd/100)\n\n**Budget Split:**\n🏨 30% Accommodation | 🍽️ 20% Food | 🎯 25% Activities\n🚗 15% Transport | 🆘 10% Emergency Reserve\n\nGenerate a trip and I'll optimize spending across all categories!`
-  } else if (/food|restaurant|eat|cuisine|dine|hungry|lunch|dinner|breakfast/i.test(lower)) {
-    response = `🍽️ **Food Guide for ${dest}:**\n\nThe Preference Agent learns your food taste using **Bayesian Beta distributions**:\n- Each cuisine has parameters (α, β)\n- Rate meals ⭐ to improve future recommendations\n- Thompson Sampling explores new food types for you!\n\n**Top Food Tips:**\n🥘 Try local specialties (ask locals for recommendations)\n🛕 Temple food (prasadam) is free and delicious\n🍜 Street food is the real experience — but pick busy stalls\n☕ Don't miss regional beverages (filter coffee, lassi, chai)\n\n**Booking Links:**\n- [Zomato](https://zomato.com) — reviews + delivery\n- [Swiggy](https://swiggy.com) — delivery\n- [Dineout](https://dineout.co.in) — table reservations\n\nGenerate your trip to see the **Foodie Spots** section!`
-  } else if (/safe|danger|security|emergency|help|police|hospital/i.test(lower)) {
-    response = `🛡️ **Safety & Emergency Guide:**\n\n**Universal Emergency Numbers (India):**\n🚨 **112** — Universal Emergency\n🚔 **100** — Police\n🚑 **108** — Ambulance\n🚒 **101** — Fire\n👩 **1091** — Women Helpline\n🏛️ **1363** — Tourist Helpline\n⚠️ **1078** — Disaster Management\n🚗 **1033** — Road Accident\n\n**Safety Tips:**\n• Keep copies of all documents (digital + physical)\n• Share your itinerary with family/friends\n• Use only registered taxis (Ola/Uber)\n• Stay in well-lit areas at night\n• Use hotel safe for valuables\n• Download offline maps before traveling\n• Carry a basic first aid kit\n• Keep your embassy number handy\n\nGenerate a trip to see **city-specific emergency contacts**!`
-  } else if (/hidden|gem|secret|offbeat|unexplored|unique/i.test(lower)) {
-    response = `💎 **Hidden Gems Discovery:**\n\nOur AI discovers hidden gems using multi-source intelligence:\n1. **OpenStreetMap Overpass API** — finds lesser-known attractions\n2. **OpenTripMap** — cultural & natural sites database\n3. **Crowd Analysis** — places with <40% crowd are flagged as gems\n4. **MCTS Optimization** — 50 iterations find unique combinations\n\n**How to find gems:**\n- Look for 💎 tagged activities in your itinerary\n- Check the **"Hidden Gems"** tab in the Discovery section\n- Low crowd level + high rating = perfect hidden gem!\n\n**Pro tip:** Rate activities ⭐⭐⭐⭐⭐ to train the AI on your preferences — it'll find similar gems in future trips!`
-  } else if (/flight|fly|plane|airport|airline/i.test(lower)) {
-    response = `✈️ **Flight Booking Guide:**\n\nSearch flights using the **Booking Wizard** after generating your trip!\n\n**Airlines Covered:** IndiGo, Air India, Vistara, SpiceJet, AirAsia, Akasa Air\n\n**Booking Platforms (with pre-filled details):**\n🔗 Google Flights — best for price comparison\n🔗 MakeMyTrip — bundled deals\n🔗 Skyscanner — global comparison\n🔗 ixigo — Indian budget focus\n🔗 Cleartrip — clean interface\n🔗 EaseMyTrip — lowest prices\n\n**Tips:**\n✅ Book 2-4 weeks ahead for best prices\n✅ Tuesday/Wednesday flights are cheapest\n✅ Use incognito mode to avoid price hikes\n✅ Compare across platforms before booking\n\nGenerate your trip first, then click **✈️ Flights** in the Booking Wizard!`
-  } else if (/train|railway|irctc|rail/i.test(lower)) {
-    response = `🚂 **Train Booking Guide:**\n\n**Train Types:**\n🚄 Vande Bharat — fastest (130 km/h)\n🚂 Rajdhani — premium overnight\n🚂 Shatabdi — day travel\n🚂 Duronto — non-stop\n🚂 Garib Rath — budget AC\n🚂 Superfast — affordable\n\n**Booking Platforms:**\n🔗 IRCTC (irctc.co.in) — official booking\n🔗 ConfirmTkt — confirmation prediction\n🔗 RailYatri — PNR status + booking\n🔗 ixigo Trains — fare comparison\n\n**Tips:**\n✅ Book 120 days in advance for confirmed seats\n✅ Tatkal booking opens at 10 AM (AC) / 11 AM (Non-AC)\n✅ Use IRCTC's "Alternate Trains" feature\n\nGenerate your trip and click **🚂 Trains** in the Booking Wizard!`
-  } else if (/hotel|stay|accommodation|hostel|resort|lodge|oyo/i.test(lower)) {
-    response = `🏨 **Accommodation Guide for ${dest}:**\n\n**Budget Options (₹500-1500):**\n- OYO Rooms, FabHotels, Treebo\n- Hostels (Zostel, GoStops)\n\n**Mid-Range (₹1500-5000):**\n- Lemon Tree, Radisson, Novotel\n- Heritage homestays\n\n**Luxury (₹5000+):**\n- Taj, ITC, The Leela, Oberoi\n- Palace hotels (in Rajasthan)\n\n**Booking Platforms:**\n🔗 Booking.com — global, free cancellation\n🔗 MakeMyTrip — Indian deals\n🔗 Goibibo — MMT partner\n🔗 Agoda — Asia specialist\n🔗 Trivago — price comparison\n🔗 OYO — budget rooms\n\nGenerate your trip and click **🏨 Hotels** in the Booking Wizard!`
-  } else if (/how.*work|algorithm|ai|machine\s*learning|reinforcement|q.?learn/i.test(lower)) {
-    response = `🧠 **How SmartRoute AI Works:**\n\n**7 Autonomous Agents:**\n1. 🗺️ **Planner** — MCTS (50 iterations) + TSP routing\n2. 🌦️ **Weather** — Naive Bayes on OpenMeteo data\n3. 👥 **Crowd** — Time-of-day heuristic (6AM-midnight)\n4. 💰 **Budget** — MDP reward optimization\n5. ❤️ **Preference** — Bayesian Beta (α,β) per category\n6. 🎫 **Booking** — Multi-platform search\n7. 🧠 **Explain** — POMDP belief state + decision trace\n\n**RL Techniques:**\n• **Q-Learning:** Q(s,a) ← Q(s,a) + α[r + γ·max Q(s',a') − Q(s,a)]\n• **Dense Reward:** per activity (rating, budget, weather, crowd, time, diversity)\n• **Sparse Reward:** per trip (completion, density, satisfaction)\n• **Thompson Sampling:** Beta(α,β) for exploration vs exploitation\n• **ε-Greedy:** ε decays 0.3 → 0.05 over episodes\n• **POMDP:** Hidden state estimation for trip quality\n\nRate activities ⭐ to train the AI in real-time!`
-  } else if (/pack|luggage|carry|bring|clothes|bag/i.test(lower)) {
-    response = `🧳 **Smart Packing Assistant:**\n\nYour packing list is AI-generated based on:\n📅 **Duration** — adjusts clothing quantity\n🌦️ **Weather** — adds rain gear, warm clothes, or sun protection\n👤 **Persona** — adventure gear, luxury items, or family essentials\n\n**Essential Categories:**\n📋 Essentials — ID, phone, charger, cash, medicines\n👕 Clothing — based on days + weather\n🧴 Toiletries — sunscreen, sanitizer, basics\n📱 Tech — charger, earphones, adapter\n😌 Comfort — neck pillow, water bottle, snacks\n\nGo to the **Packing** tab to see your personalized checklist with progress tracking!`
-  } else if (/multi.?city|multiple\s+cities|road\s*trip|circuit/i.test(lower)) {
-    response = `🗺️ **Multi-City Trip Planning:**\n\nSmartRoute supports multi-city trips!\n\n**How to use:**\n1. Click the **Multi-City** button in the planning panel\n2. Add cities with days per city\n3. AI optimizes transit between cities\n4. Each city gets its own itinerary + weather + recommendations\n\n**Example Routes:**\n🏰 Golden Triangle: Delhi → Agra → Jaipur (6-8 days)\n🏖️ South India: Chennai → Pondicherry → Madurai → Kochi (10 days)\n⛰️ Himalayan Circuit: Delhi → Shimla → Manali → Leh (12 days)\n🕌 Heritage Route: Delhi → Varanasi → Kolkata (7 days)\n\nThe route is optimized using nearest-neighbor TSP to minimize travel time!`
-  } else if (/nearby|around\s*me|close\s*to|near\s*here|what.*nearby/i.test(lower)) {
-    response = `📍 **Finding Nearby Places:**\n\nClick the **"Nearby"** button in the header to discover places around you!\n\n**What I search for:**\n🏛️ Tourist attractions & museums\n🍽️ Restaurants & cafes\n🏥 Hospitals & pharmacies\n🏦 Banks & ATMs\n🛍️ Shopping malls\n🌳 Parks & gardens\n⛪ Temples, churches, mosques\n\n**How it works:**\n1. Your GPS location is detected\n2. Overpass API searches within 3km radius\n3. Places are sorted by distance & relevance\n4. Click any place to see details + map\n\nMake sure to allow location access when prompted!`
-  } else if (/compare|versus|vs|which.*better|which.*choose/i.test(lower)) {
-    response = `📊 **Trip Comparison Tool:**\n\nGenerate multiple trips, then use **Compare Trips** to see side-by-side:\n- 📅 Duration & total cost\n- 💰 Budget utilization %\n- 📍 Number of activities\n- 🌧️ Weather quality\n- 👥 Average crowd levels\n\n**How to compare:**\n1. Generate Trip A (e.g., Jaipur)\n2. Generate Trip B (e.g., Goa)\n3. Click **Compare** in the header\n4. See the comparison table!\n\nAll generated trips are auto-saved for comparison.`
-  } else if (/campus|srm|university|college|school|institute/i.test(lower)) {
-    response = `🏫 **Campus & University Support:**\n\nSmartRoute supports **campus-specific** trip planning!\n\n**SRM University Campuses:**\n🏫 SRM Kattankulathur (Chennai) — main campus\n🏫 SRM Trichy — Tiruchirappalli campus\n🏫 SRM NCR — Greater Noida/Delhi campus\n🏫 SRM Andhra Pradesh — Amaravati campus\n🏫 SRM Sikkim — Gangtok campus\n\n**How to use:**\nJust type the campus name as destination:\n- "SRM Trichy campus"\n- "SRM NCR campus"\n- "SRM Andhra campus"\n\nThe AI will resolve it to the correct city and generate local attractions!\n\n**Also supported:** IIT Madras, IIT Delhi, VIT Vellore, BITS Pilani, NIT Trichy, and more!`
-  } else if (/thank|thanks|thx|great|awesome|nice|good|cool|perfect|amazing/i.test(lower)) {
-    response = `😊 **You're welcome!** Glad I could help!\n\nRemember:\n• Rate ⭐ activities to make AI smarter\n• Use Emergency Replan if plans change\n• Check the Packing tab before your trip\n• Save important numbers from Emergency Contacts\n\nHave an amazing trip! 🌟 Is there anything else I can help with?`
-  } else {
-    // Generic fallback with smart suggestions
-    response = `🤖 **SmartRoute AI Assistant:**\n\nI didn't quite understand that. Here are things I can help with:\n\n🗺️ **"Plan a trip to Jaipur"** — full AI itinerary\n✈️ **"Flights from Chennai to Delhi"** — booking help\n🌦️ **"Weather in Goa"** — forecast & tips\n💰 **"Budget tips"** — save money smartly\n🍽️ **"Best food spots"** — restaurant guide\n🛡️ **"Safety tips"** — emergency numbers\n💎 **"Hidden gems in Udaipur"** — offbeat places\n🏫 **"Trip near SRM campus"** — campus area exploration\n🧳 **"What to pack?"** — AI packing list\n🧠 **"How does AI work?"** — algorithm explanation\n\n💡 **Tip:** Try being specific! Instead of short phrases, ask full questions like "What should I do in Manali for 3 days?"`
+  }
+  // 2. Greetings — concise, helpful
+  else if (/^(hello|hi|hey|namaste|howdy|sup)\b|good\s+(morning|afternoon|evening)/i.test(lower)) {
+    response = `👋 **Hey there!** How can I help you today?\n\nQuick options:\n- 🗺️ "Plan a trip to [city]"\n- ✈️ "Search flights to Delhi"\n- 🌦️ "Weather in ${dest || 'Goa'}"\n- 💰 "Budget tips"\n- 🍽️ "Food recommendations"\n- 🛡️ "Safety tips"\n\nJust ask away! 😊`
+  }
+  // 3. Specific question about current trip
+  else if (dest && /what|how|tell|show|give|suggest|recommend/i.test(lower) && /my\s+trip|itinerary|plan|schedule/i.test(lower)) {
+    if (state_summary()) {
+      response = state_summary()
+    } else {
+      response = `📋 Your current trip to **${dest}** is active. Here are things I can help with:\n\n- "Optimize my route" — reduce travel time\n- "Balance my budget" — even spending across days\n- "Avoid crowds" — reorder for low-crowd times\n- "Add food stops" — insert meal breaks\n- "Emergency replan" — handle weather/delays\n\nUse the **Smart Automations** panel on the right for one-click optimizations!`
+    }
+  }
+  // 4. Weather queries
+  else if (/weather|forecast|rain|temperature|hot|cold|humid/i.test(lower)) {
+    const target = dest || extractCity(lower) || 'your destination'
+    response = `🌦️ **Weather for ${target}:**\n\nI use the **OpenMeteo API** with **Naive Bayes classification** to analyze:\n- 🌡️ Temperature range (min/max)\n- 💧 Precipitation probability\n- 💨 Wind speed\n- ☀️ UV index\n\n**Risk Levels:** 🟢 Low · 🟡 Medium · 🔴 High\n\n${dest ? 'Check your itinerary — each day shows weather forecasts with risk indicators.' : 'Generate a trip to see day-by-day weather analysis!'}\n\n💡 If bad weather is detected, use **Weather Swap** in Smart Automations to auto-replace outdoor activities!`
+  }
+  // 5. Budget
+  else if (/budget|cheap|save|money|cost|expensive|afford|price/i.test(lower)) {
+    response = `💰 **Budget Tips${dest ? ' for '+dest : ''}:**\n\n**Money-Saving Strategies:**\n🚂 Book trains 30+ days ahead on IRCTC\n🏨 OYO/Treebo for ₹600-1500/night stays\n🍽️ Local dhabas & street food (₹50-150/meal)\n🚌 Use public transport & shared cabs\n🆓 Free: temples, parks, beaches, ghats\n\n**Smart Budget Split:**\n🏨 30% Stay | 🍽️ 20% Food | 🎯 25% Activities | 🚗 15% Transport | 🆘 10% Emergency\n\n${dest ? `Your ₹${budgetCtx.toLocaleString()} budget is being optimized by the AI Budget Agent using MDP reward functions.` : 'Generate a trip to see AI-optimized budget allocation!'}\n\n💡 Click **Balance Budget** in Smart Automations to auto-optimize spending!`
+  }
+  // 6. Food
+  else if (/food|restaurant|eat|cuisine|dine|hungry|lunch|dinner|breakfast|snack/i.test(lower)) {
+    response = `🍽️ **Food Guide${dest ? ' for '+dest : ''}:**\n\n**Recommendations:**\n🥘 Try local specialties & regional dishes\n🛕 Temple food (prasadam) — free & authentic\n🍜 Street food at busy stalls — follow the locals\n☕ Regional drinks: filter coffee, lassi, chai\n\n**Booking:**\n- [Zomato](https://zomato.com) — reviews + delivery\n- [Swiggy](https://swiggy.com) — quick delivery\n- [Dineout](https://dineout.co.in) — table reservations\n\n💡 Use **Add Food Stops** in Smart Automations to auto-insert meal breaks into your itinerary!`
+  }
+  // 7. Safety
+  else if (/safe|danger|security|emergency|help|police|hospital/i.test(lower)) {
+    response = `🛡️ **Emergency Numbers (India):**\n\n🚨 **112** — Universal Emergency\n🚔 **100** — Police\n🚑 **108** — Ambulance\n🚒 **101** — Fire\n👩 **1091** — Women Helpline\n🏛️ **1363** — Tourist Helpline\n\n**Safety Tips:**\n• Share itinerary with family\n• Use only registered taxis (Ola/Uber)\n• Download offline maps\n• Keep document copies\n• Stay in well-lit areas at night\n\n${dest ? `Check the **Emergency Contacts** panel in the sidebar for ${dest}-specific numbers.` : ''}`
+  }
+  // 8. Hidden gems
+  else if (/hidden|gem|secret|offbeat|unexplored|unique|unusual/i.test(lower)) {
+    response = `💎 **Hidden Gems${dest ? ' near '+dest : ''}:**\n\nOur AI discovers gems using:\n1. **Overpass API** — finds lesser-known spots\n2. **Crowd Analysis** — places <40% crowd\n3. **MCTS** — 50 iterations for unique combos\n\nLook for 💎 tagged activities with low crowd levels in your itinerary.\n\n**Check the Hidden Gems tab** in the Discovery section after generating your trip!\n\n💡 Rate activities ⭐⭐⭐⭐⭐ to train the AI — it'll find similar gems in future trips!`
+  }
+  // 9. Flights
+  else if (/flight|fly|plane|airport|airline/i.test(lower)) {
+    const fromCity = origin || extractCity(lower.replace(/flight|fly|plane|from|to/gi, '')) || 'your city'
+    const toCity = dest || extractCityAfter(lower, 'to') || 'your destination'
+    response = `✈️ **Flight Search: ${fromCity} → ${toCity}**\n\n**Airlines:** IndiGo, Air India, Vistara, SpiceJet, AirAsia, Akasa Air\n\n**Platforms with pre-filled details:**\n🔗 Google Flights — price comparison\n🔗 MakeMyTrip — bundled deals\n🔗 Skyscanner — global search\n🔗 ixigo — budget focus\n\n**Tips:**\n✅ Book 2-4 weeks ahead\n✅ Tue/Wed flights cheapest\n✅ Use incognito mode\n\n${dest ? 'Click **✈️ Flights** in the Booking Wizard below your itinerary!' : 'Generate a trip first, then use the Booking Wizard!'}`
+  }
+  // 10. Trains
+  else if (/train|railway|irctc|rail/i.test(lower)) {
+    response = `🚂 **Train Booking Guide:**\n\n**Types:** Vande Bharat (fastest) · Rajdhani · Shatabdi · Duronto · Superfast\n\n**Book on:** IRCTC (official) · ConfirmTkt · RailYatri · ixigo Trains\n\n**Tips:**\n✅ Book 120 days in advance\n✅ Tatkal: 10 AM (AC) / 11 AM (Non-AC)\n✅ Use "Alternate Trains" feature\n\n${dest ? 'Click **🚂 Trains** in the Booking Wizard!' : 'Generate your trip first!'}`
+  }
+  // 11. Hotels
+  else if (/hotel|stay|accommodation|hostel|resort|lodge|oyo|airbnb/i.test(lower)) {
+    response = `🏨 **Accommodation${dest ? ' in '+dest : ''}:**\n\n**Budget (₹500-1500):** OYO, Treebo, Zostel\n**Mid-Range (₹1500-5000):** Lemon Tree, Radisson\n**Luxury (₹5000+):** Taj, ITC, Oberoi\n\n**Platforms:** Booking.com · MakeMyTrip · Goibibo · Agoda · Trivago · OYO\n\n${dest ? 'Click **🏨 Hotels** in the Booking Wizard!' : 'Generate your trip first!'}`
+  }
+  // 12. AI explanation
+  else if (/how.*work|algorithm|ai|machine\s*learning|reinforcement|q.?learn|explain/i.test(lower)) {
+    response = `🧠 **How SmartRoute AI Works:**\n\n**7 Agents:**\n1. 🗺️ Planner — MCTS (50 iterations)\n2. 🌦️ Weather — Naive Bayes\n3. 👥 Crowd — Time-based prediction\n4. 💰 Budget — MDP optimization\n5. ❤️ Preference — Bayesian Beta sampling\n6. 🎫 Booking — Multi-platform search\n7. 🧠 Explainer — POMDP belief state\n\n**RL:** Q(s,a) ← Q(s,a) + α[r + γ·max Q(s',a') − Q(s,a)]\n**Dense Reward:** rating + budget + weather − crowd + time + diversity\n**Exploration:** ε-greedy + Thompson Sampling\n\nRate activities ⭐ to train the AI in real-time!`
+  }
+  // 13. Packing
+  else if (/pack|luggage|carry|bring|clothes|bag|suitcase/i.test(lower)) {
+    response = `🧳 **Smart Packing:**\n\nYour AI packing list adapts to:\n📅 Trip duration\n🌦️ Weather forecast\n👤 Travel persona\n\nGo to the **Packing** tab to see your personalized checklist!\n\nUse **Pre-Trip Checklist** in Smart Automations for a complete preparation guide.`
+  }
+  // 14. Multi-city
+  else if (/multi.?city|multiple\s+cities|road\s*trip|circuit/i.test(lower)) {
+    response = `🗺️ **Multi-City Trips:**\n\nClick **Multi-City Trip** in the planning panel!\n\n**Popular Routes:**\n🏰 Golden Triangle: Delhi → Agra → Jaipur\n🏖️ South India: Chennai → Pondicherry → Madurai → Kochi\n⛰️ Himalayan: Delhi → Shimla → Manali\n\nAI optimizes transit between cities using nearest-neighbor TSP!`
+  }
+  // 15. Nearby
+  else if (/nearby|around\s*me|close\s*to|near\s*here/i.test(lower)) {
+    response = `📍 **Nearby Places:**\n\nClick the **Nearby** button in the header!\n\nSearches for: attractions, restaurants, hospitals, parks, markets within 3-5km radius using the Overpass API.\n\n${dest ? `Or use the itinerary coordinates to discover hidden spots around ${dest}.` : 'Allow location access or generate a trip first!'}`
+  }
+  // 16. Campus
+  else if (/campus|srm|university|college|institute/i.test(lower)) {
+    response = `🏫 **Campus Trip Planning:**\n\n**Supported Campuses:**\n- SRM Kattankulathur (Chennai)\n- SRM Trichy\n- SRM NCR (Greater Noida)\n- SRM Andhra (Amaravati)\n- SRM Sikkim (Gangtok)\n- IIT Madras, IIT Delhi, IIT Bombay\n- VIT Vellore, BITS Pilani, NIT Trichy\n\nJust type the campus name as destination! e.g., "SRM Trichy campus"`
+  }
+  // 17. Compare
+  else if (/compare|versus|vs|which.*better/i.test(lower)) {
+    response = `📊 **Trip Comparison:**\n\nGenerate multiple trips, then click **Compare Trips** to see side-by-side metrics: cost, activities, weather, crowd levels, and budget utilization.\n\nAll generated trips are auto-saved for comparison.`
+  }
+  // 18. Thanks
+  else if (/thank|thanks|thx|great|awesome|nice|good|cool|perfect|amazing/i.test(lower)) {
+    response = `😊 Glad I could help! Remember to:\n• Rate ⭐ activities to improve AI\n• Use Smart Automations for optimization\n• Check Packing tab before your trip\n\nHave an amazing journey! 🌟`
+  }
+  // 19. What can you do / help
+  else if (/what.*can|what.*do|help me|capabilities|features/i.test(lower)) {
+    response = `🤖 **I can help you with:**\n\n🗺️ Trip planning — "Plan a trip to Jaipur"\n✈️ Flight search — "Flights to Delhi"\n🚂 Train booking — "Trains to Mumbai"\n🏨 Hotels — "Hotels in Goa"\n🌦️ Weather — "Weather in Manali"\n💰 Budget — "Budget tips"\n🍽️ Food — "Best food in Chennai"\n🛡️ Safety — "Safety tips"\n💎 Hidden gems — "Secret spots"\n🏫 Campus trips — "SRM Trichy campus"\n🧳 Packing — "What to pack"\n📊 Compare — "Compare my trips"\n🗺️ Multi-city — "Multi-city route"\n\nJust ask! 😊`
+  }
+  // Default — helpful, not a long intro
+  else {
+    response = `I'm not sure I understood that. Try asking:\n\n🗺️ "Plan a trip to [city]"\n✈️ "Flights to [city]"\n🌦️ "Weather in [city]"\n💰 "Budget tips"\n🍽️ "Food recommendations"\n🛡️ "Safety tips"\n\nOr use the suggestion buttons below! 👇`
   }
   
   return c.json({success:true, response})
 })
+
+// Helper functions for chatbot
+function extractCity(text: string): string {
+  const cities = Object.keys(CITY_COORDS)
+  for (const city of cities) {
+    if (text.toLowerCase().includes(city)) return city.charAt(0).toUpperCase() + city.slice(1)
+  }
+  return ''
+}
+
+function extractCityAfter(text: string, keyword: string): string {
+  const idx = text.toLowerCase().indexOf(keyword)
+  if (idx < 0) return ''
+  const after = text.substring(idx + keyword.length).trim()
+  return extractCity(after) || after.split(/\s+/)[0] || ''
+}
+
+function state_summary(): string {
+  return ''
+}
 
 // ============================================
 // SERVE FRONTEND

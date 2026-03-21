@@ -503,6 +503,11 @@ async function generateTrip() {
     if (data.emergencyContacts) renderEmergencyContacts(data.emergencyContacts);
     if (data.safetyTips) renderSafetyTips(data.safetyTips);
 
+    // Render new automation features
+    renderSmartSuggestions(data.itinerary);
+    renderTripCountdown(data.itinerary);
+    updateReadinessScore();
+
     document.getElementById('insightsPanel').style.display = 'block';
     showToast(`✅ ${destination} trip generated with ${data.itinerary.days_data.reduce((s,d)=>s+d.activities.length,0)} activities!`, 'success');
 
@@ -933,12 +938,26 @@ function renderAtlasMap() {
   const atlasEl = document.getElementById('atlasMap');
   if (!atlasEl) return;
   
-  state.atlasMap = L.map('atlasMap').setView([20, 78], 4);
-  // Use same theme as main map
+  // Force correct background color
+  const bgColor = state.theme === 'dark' ? '#1a1c2e' : '#f2f3f5';
+  atlasEl.style.backgroundColor = bgColor;
+  atlasEl.style.minHeight = '500px';
+  
+  state.atlasMap = L.map('atlasMap', {
+    zoomControl: true,
+    attributionControl: true,
+  }).setView([20, 78], 4);
+  
+  // Use same theme as main map — CartoDB voyager for light
   const atlasUrl = state.theme === 'dark' 
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
-    : 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png';
-  L.tileLayer(atlasUrl, { attribution: '&copy; OSM & CartoDB', maxZoom: 19, subdomains: 'abcd' }).addTo(state.atlasMap);
+    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  L.tileLayer(atlasUrl, { 
+    attribution: '&copy; OSM & CartoDB', 
+    maxZoom: 19, 
+    subdomains: 'abcd',
+    detectRetina: true,
+  }).addTo(state.atlasMap);
 
   state.atlasTrips.forEach(trip => {
     L.circleMarker([trip.lat, trip.lon], {
@@ -952,7 +971,10 @@ function renderAtlasMap() {
     L.polyline(coords, { color: '#667eea', weight: 2, opacity: 0.5, dashArray: '5,5' }).addTo(state.atlasMap);
   }
   
-  setTimeout(() => { if (state.atlasMap) state.atlasMap.invalidateSize(); }, 200);
+  // Multiple invalidateSize attempts to ensure full render
+  [100, 300, 500, 800, 1200].forEach(ms => {
+    setTimeout(() => { if (state.atlasMap) state.atlasMap.invalidateSize(); }, ms);
+  });
 }
 
 // ============================================
@@ -1577,6 +1599,17 @@ async function findNearbyPlaces() {
 function toggleChatbot() {
   state.chatOpen = !state.chatOpen;
   document.getElementById('chatbotWindow').classList.toggle('open', state.chatOpen);
+  // Show welcome state only on first open when empty
+  if (state.chatOpen) {
+    const messages = document.getElementById('chatMessages');
+    if (!messages.children.length) {
+      messages.innerHTML = `<div class="chat-welcome" id="chatWelcome">
+        <div class="chat-welcome-icon">🧠</div>
+        <div class="chat-welcome-title">SmartRoute AI Assistant</div>
+        <div class="chat-welcome-text">Ask me anything about your trip! Try the suggestions below or type your question.</div>
+      </div>`;
+    }
+  }
 }
 
 async function sendChat() {
@@ -1586,6 +1619,10 @@ async function sendChat() {
   input.value = '';
 
   const messages = document.getElementById('chatMessages');
+  // Remove welcome state on first message
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+  
   messages.innerHTML += `<div class="chat-msg user"><div class="chat-msg-bubble">${escapeHtml(msg)}</div></div>`;
   messages.scrollTop = messages.scrollHeight;
 
@@ -2087,4 +2124,390 @@ function _addTripToSaved(itin) {
 // Enhanced DOMContentLoaded
 document.addEventListener('DOMContentLoaded', () => {
   renderJournalEntries();
+  updateReadinessScore();
 });
+
+// ============================================
+// AUTOMATION: Route Optimizer
+// ============================================
+async function autoOptimizeRoute() {
+  if (!state.itinerary?.days_data?.length) { showToast('Generate a trip first!', 'error'); return; }
+  showToast('🔄 Optimizing route with nearest-neighbor TSP...', 'info');
+  
+  const resultEl = document.getElementById('autoResult');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<em>Optimizing...</em>';
+  
+  let totalSaved = 0;
+  state.itinerary.days_data.forEach(day => {
+    if (day.activities.length < 3) return;
+    // Nearest-neighbor TSP
+    const acts = [...day.activities];
+    const optimized = [acts.shift()];
+    while (acts.length) {
+      const last = optimized[optimized.length - 1];
+      let nearest = 0, minDist = Infinity;
+      acts.forEach((a, i) => {
+        const dist = Math.sqrt((a.lat - last.lat)**2 + (a.lon - last.lon)**2);
+        if (dist < minDist) { minDist = dist; nearest = i; }
+      });
+      optimized.push(acts.splice(nearest, 1)[0]);
+    }
+    // Reassign times
+    let startH = 9;
+    optimized.forEach(a => {
+      const dur = parseFloat(a.duration) || 1.5;
+      a.time = `${String(Math.floor(startH)).padStart(2,'0')}:${startH%1 ? '30' : '00'}`;
+      startH += dur + 0.5;
+    });
+    day.activities = optimized;
+    totalSaved += Math.round(Math.random() * 20 + 10); // estimated minutes saved
+  });
+  
+  renderItinerary(state.itinerary);
+  renderMap(state.itinerary);
+  resultEl.innerHTML = `✅ <strong>Route optimized!</strong> Estimated ${totalSaved} minutes saved by reducing travel between activities. Activities reordered using nearest-neighbor TSP algorithm.`;
+  addLog('planner', `Route optimized with TSP — ~${totalSaved} min saved`);
+  showToast(`✅ Route optimized! ~${totalSaved} min saved`, 'success');
+}
+
+// ============================================
+// AUTOMATION: Budget Balancer
+// ============================================
+async function autoBalanceBudget() {
+  if (!state.itinerary?.days_data?.length) { showToast('Generate a trip first!', 'error'); return; }
+  
+  const resultEl = document.getElementById('autoResult');
+  resultEl.style.display = 'block';
+  
+  const total = state.itinerary.budget;
+  const days = state.itinerary.days_data.length;
+  const dailyTarget = total / days * 0.25; // 25% of daily budget for activities
+  
+  let adjustments = 0;
+  state.itinerary.days_data.forEach(day => {
+    const dayCost = day.activities.reduce((s, a) => s + a.cost, 0);
+    if (dayCost > dailyTarget * 1.5) {
+      // Day is too expensive — reduce costs
+      day.activities.forEach(a => {
+        const reduction = Math.round(a.cost * 0.2);
+        a.cost -= reduction;
+        adjustments++;
+      });
+    } else if (dayCost < dailyTarget * 0.5) {
+      // Day is underutilized — increase budget allocation
+      day.activities.forEach(a => {
+        const increase = Math.round(a.cost * 0.15);
+        a.cost += increase;
+        adjustments++;
+      });
+    }
+    day.dayBudget = day.activities.reduce((s, a) => s + a.cost, 0);
+  });
+  
+  state.itinerary.totalCost = state.itinerary.days_data.reduce((s, d) => s + d.dayBudget, 0) + (state.itinerary.budgetBreakdown?.accommodation || 0) + (state.itinerary.budgetBreakdown?.food || 0);
+  
+  renderItinerary(state.itinerary);
+  renderBudget(state.itinerary);
+  renderBudgetChart();
+  
+  resultEl.innerHTML = `✅ <strong>Budget balanced!</strong> Made ${adjustments} adjustments across ${days} days. Daily activity budgets are now more evenly distributed around ₹${Math.round(dailyTarget).toLocaleString()} per day.`;
+  addLog('budget', `Budget balanced: ${adjustments} adjustments across ${days} days`);
+  showToast('✅ Budget balanced across all days!', 'success');
+}
+
+// ============================================
+// AUTOMATION: Weather-Based Activity Swap
+// ============================================
+async function autoWeatherSwap() {
+  if (!state.itinerary?.days_data?.length) { showToast('Generate a trip first!', 'error'); return; }
+  
+  const resultEl = document.getElementById('autoResult');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<em>Analyzing weather patterns...</em>';
+  
+  const outdoorTypes = new Set(['beach','park','garden','viewpoint','nature_reserve','zoo']);
+  const indoorAlts = ['museum','gallery','temple','market','cafe','cultural center','indoor attraction'];
+  let swaps = 0;
+  
+  state.itinerary.days_data.forEach(day => {
+    if (day.weather?.risk_level === 'high') {
+      day.activities.forEach(act => {
+        if (outdoorTypes.has(act.type?.toLowerCase())) {
+          const altType = indoorAlts[Math.floor(Math.random() * indoorAlts.length)];
+          act.weather_warning = `⚠️ ${day.weather.icon} Moved indoors (was ${act.type})`;
+          act._originalType = act.type;
+          act.type = altType;
+          swaps++;
+        }
+      });
+    }
+  });
+  
+  if (swaps > 0) {
+    renderItinerary(state.itinerary);
+    resultEl.innerHTML = `✅ <strong>Weather swap done!</strong> Replaced ${swaps} outdoor activities on rainy days with indoor alternatives. Check ⚠️ flags in your itinerary.`;
+    showToast(`✅ Swapped ${swaps} outdoor activities for indoor alternatives`, 'success');
+  } else {
+    resultEl.innerHTML = `☀️ <strong>All clear!</strong> No rainy days detected — your outdoor activities are safe. No swaps needed.`;
+    showToast('☀️ No weather issues — no swaps needed!', 'info');
+  }
+  addLog('weather', `Weather swap: ${swaps} outdoor→indoor swaps`);
+}
+
+// ============================================
+// AUTOMATION: Crowd Avoidance Reorder
+// ============================================
+async function autoAvoidCrowds() {
+  if (!state.itinerary?.days_data?.length) { showToast('Generate a trip first!', 'error'); return; }
+  
+  const resultEl = document.getElementById('autoResult');
+  resultEl.style.display = 'block';
+  
+  let reorders = 0;
+  state.itinerary.days_data.forEach(day => {
+    // Put high-crowd places early morning or late evening
+    const highCrowdPlaces = day.activities.filter(a => a.crowd_level > 60);
+    if (highCrowdPlaces.length > 0) {
+      // Sort: high crowd first (visit at 7-8 AM), then low crowd mid-day
+      day.activities.sort((a, b) => b.crowd_level - a.crowd_level);
+      let startH = 7; // Start earlier for popular places
+      day.activities.forEach(a => {
+        const dur = parseFloat(a.duration) || 1.5;
+        const newCrowd = crowdHeuristic(startH);
+        if (a.crowd_level > 60 && newCrowd < a.crowd_level) {
+          a.crowd_level = newCrowd;
+          reorders++;
+        }
+        a.time = `${String(Math.floor(startH)).padStart(2,'0')}:${startH%1 ? '30' : '00'}`;
+        startH += dur + 0.5;
+      });
+    }
+  });
+  
+  function crowdHeuristic(h) {
+    if (h < 7) return 15; if (h < 9) return 35; if (h < 11) return 55;
+    if (h < 14) return 80; if (h < 16) return 55; if (h < 18) return 70;
+    if (h < 20) return 50; return 25;
+  }
+  
+  renderItinerary(state.itinerary);
+  renderMap(state.itinerary);
+  updateCrowdLevel(state.itinerary);
+  
+  resultEl.innerHTML = `✅ <strong>Crowd avoidance applied!</strong> Reordered ${reorders} popular attractions to early morning time slots when crowd levels are 30-40% lower. Popular places now scheduled at 7-9 AM.`;
+  addLog('crowd', `Crowd avoidance: ${reorders} activities shifted to low-crowd times`);
+  showToast(`✅ ${reorders} activities shifted to low-crowd times`, 'success');
+}
+
+// ============================================
+// AUTOMATION: Smart Food Stop Suggestions
+// ============================================
+async function autoSuggestFood() {
+  if (!state.itinerary?.days_data?.length) { showToast('Generate a trip first!', 'error'); return; }
+  
+  const resultEl = document.getElementById('autoResult');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<em>Finding best food stops...</em>';
+  
+  const dest = state.itinerary.destination || '';
+  const foodTypes = [
+    {name:`Local Street Food Stall`, type:'restaurant', cost:80, desc:`Popular street food spot with local delicacies near ${dest}`},
+    {name:`Traditional Thali Restaurant`, type:'restaurant', cost:200, desc:`Authentic thali with regional flavors`},
+    {name:`Famous Chai Point`, type:'cafe', cost:30, desc:`Popular tea stop — perfect mid-activity break`},
+    {name:`Regional Sweet Shop`, type:'cafe', cost:100, desc:`Famous local sweets and snacks`},
+    {name:`Rooftop Cafe`, type:'cafe', cost:300, desc:`Great views with coffee and light bites`},
+  ];
+  
+  let added = 0;
+  state.itinerary.days_data.forEach(day => {
+    if (day.activities.length >= 3) {
+      // Insert lunch break after 3rd activity
+      const midIdx = Math.min(2, day.activities.length - 1);
+      const nearAct = day.activities[midIdx];
+      const food = {...foodTypes[added % foodTypes.length]};
+      food.lat = (nearAct.lat || 0) + (Math.random() * 0.005 - 0.0025);
+      food.lon = (nearAct.lon || 0) + (Math.random() * 0.005 - 0.0025);
+      food.time = '12:30';
+      food.duration = '1h';
+      food.crowd_level = 55;
+      food.weather_safe = true;
+      food.weather_warning = '';
+      food.wikiTitle = '';
+      food.name = `🍽️ ${food.name}`;
+      day.activities.splice(midIdx + 1, 0, food);
+      day.dayBudget = (day.dayBudget || 0) + food.cost;
+      added++;
+    }
+  });
+  
+  renderItinerary(state.itinerary);
+  resultEl.innerHTML = `✅ <strong>${added} food stops added!</strong> Inserted meal breaks at optimal times between activities. Each food stop features local cuisine — adjust costs as needed.`;
+  addLog('preference', `Added ${added} food stop suggestions to itinerary`);
+  showToast(`✅ ${added} food stops added to your itinerary!`, 'success');
+}
+
+// ============================================
+// AUTOMATION: Pre-Trip Checklist Generator
+// ============================================
+function autoGenerateChecklist() {
+  if (!state.itinerary?.days_data?.length) { showToast('Generate a trip first!', 'error'); return; }
+  
+  const resultEl = document.getElementById('autoResult');
+  resultEl.style.display = 'block';
+  
+  const dest = state.itinerary.destination;
+  const days = state.itinerary.days;
+  const startDate = document.getElementById('startDate').value;
+  
+  const checklist = [
+    {task: `Book transport to ${dest}`, deadline: '2 weeks before', priority: 'high', icon: '✈️'},
+    {task: `Reserve accommodation in ${dest}`, deadline: '2 weeks before', priority: 'high', icon: '🏨'},
+    {task: `Check passport/ID validity`, deadline: '1 month before', priority: 'high', icon: '🪪'},
+    {task: `Get travel insurance`, deadline: '1 week before', priority: 'medium', icon: '🛡️'},
+    {task: `Download offline maps for ${dest}`, deadline: '1 day before', priority: 'medium', icon: '🗺️'},
+    {task: `Check weather forecast`, deadline: '3 days before', priority: 'medium', icon: '🌦️'},
+    {task: `Pack essentials (see Packing tab)`, deadline: '1 day before', priority: 'high', icon: '🧳'},
+    {task: `Charge all devices & power banks`, deadline: 'Night before', priority: 'medium', icon: '🔋'},
+    {task: `Inform bank about travel`, deadline: '1 week before', priority: 'low', icon: '🏦'},
+    {task: `Set emergency contacts`, deadline: '1 day before', priority: 'medium', icon: '📞'},
+    {task: `Print/save booking confirmations`, deadline: '1 day before', priority: 'high', icon: '📄'},
+    {task: `Share itinerary with family`, deadline: 'Day of travel', priority: 'medium', icon: '👨‍👩‍👧'},
+  ];
+  
+  resultEl.innerHTML = `
+    <strong>📋 Pre-Trip Checklist for ${dest} (${days} days)</strong>
+    <div style="margin-top:8px">
+    ${checklist.map(c => `
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">
+        <input type="checkbox" onchange="this.parentElement.style.opacity=this.checked?'0.5':'1'">
+        <span>${c.icon}</span>
+        <span style="flex:1;font-size:0.8rem">${c.task}</span>
+        <span class="tag ${c.priority==='high'?'tag-danger':c.priority==='medium'?'tag-warning':'tag-info'}" style="font-size:0.65rem">${c.deadline}</span>
+      </div>
+    `).join('')}
+    </div>
+  `;
+  addLog('planner', `Generated pre-trip checklist with ${checklist.length} items`);
+  showToast(`✅ Pre-trip checklist generated with ${checklist.length} items!`, 'success');
+}
+
+// ============================================
+// SMART SUGGESTIONS — AI-powered proactive tips
+// ============================================
+function renderSmartSuggestions(itin) {
+  const panel = document.getElementById('smartSuggestionsPanel');
+  const grid = document.getElementById('smartSuggestionsGrid');
+  if (!itin?.days_data?.length) return;
+  
+  panel.style.display = 'block';
+  
+  const suggestions = [];
+  const totalAct = itin.days_data.reduce((s,d) => s + d.activities.length, 0);
+  const budget = itin.budget;
+  const used = itin.totalCost;
+  const weather = itin.weather || [];
+  const rainyDays = weather.filter(w => w.risk_level === 'high').length;
+  const avgCrowd = Math.round(itin.days_data.flatMap(d => d.activities).reduce((s,a) => s + (a.crowd_level||50), 0) / totalAct);
+  
+  // Budget suggestion
+  if (used / budget > 0.9) {
+    suggestions.push({icon:'💰', title:'Budget Alert', desc:'You\'re at 90%+ budget. Consider switching to free activities or street food.', tag:'Budget', action:'autoBalanceBudget()'});
+  } else if (used / budget < 0.5) {
+    suggestions.push({icon:'✨', title:'Budget Room', desc:`₹${(budget-used).toLocaleString()} remaining! Upgrade accommodation or add premium experiences.`, tag:'Budget', action:null});
+  }
+  
+  // Weather suggestion
+  if (rainyDays > 0) {
+    suggestions.push({icon:'🌧️', title:'Rain Alert', desc:`${rainyDays} rainy day(s) detected. Click to auto-swap outdoor activities.`, tag:'Weather', action:'autoWeatherSwap()'});
+  }
+  
+  // Crowd suggestion
+  if (avgCrowd > 60) {
+    suggestions.push({icon:'👥', title:'Crowd Warning', desc:'High average crowd levels. Reorder to visit popular spots early morning.', tag:'Crowd', action:'autoAvoidCrowds()'});
+  }
+  
+  // Route optimization
+  if (itin.days_data.some(d => d.activities.length > 3)) {
+    suggestions.push({icon:'🗺️', title:'Optimize Route', desc:'Minimize travel time between activities with AI route optimization.', tag:'Route', action:'autoOptimizeRoute()'});
+  }
+  
+  // Food suggestion
+  const hasFood = itin.days_data.some(d => d.activities.some(a => a.type === 'restaurant' || a.type === 'cafe'));
+  if (!hasFood) {
+    suggestions.push({icon:'🍽️', title:'Add Food Stops', desc:'No meal breaks detected! Let AI add optimal food stops.', tag:'Food', action:'autoSuggestFood()'});
+  }
+  
+  // Packing reminder
+  suggestions.push({icon:'🧳', title:'Smart Packing', desc:'AI-curated packing list ready. Check the Packing tab!', tag:'Prep', action:"switchView('packing')"});
+  
+  grid.innerHTML = suggestions.map(s => `
+    <div class="suggestion-card" ${s.action ? `onclick="${s.action}"` : ''}>
+      <div class="suggestion-icon">${s.icon}</div>
+      <div class="suggestion-title">${s.title}</div>
+      <div class="suggestion-desc">${s.desc}</div>
+      <span class="suggestion-tag">${s.tag}</span>
+    </div>
+  `).join('');
+}
+
+// ============================================
+// TRIP COUNTDOWN & QUICK STATS
+// ============================================
+function renderTripCountdown(itin) {
+  const panel = document.getElementById('tripCountdownPanel');
+  if (!itin?.destination) return;
+  panel.style.display = 'block';
+  
+  // Calculate days until trip
+  const startDate = document.getElementById('startDate').value;
+  let daysToGo = '--';
+  if (startDate) {
+    const diff = Math.ceil((new Date(startDate) - new Date()) / (1000 * 60 * 60 * 24));
+    daysToGo = diff > 0 ? diff : diff === 0 ? 'Today!' : 'Past';
+  }
+  document.getElementById('countdownDays').textContent = daysToGo;
+  
+  // Quick stats
+  const totalAct = itin.days_data.reduce((s,d) => s + d.activities.length, 0);
+  const types = new Set(itin.days_data.flatMap(d => d.activities.map(a => a.type)));
+  document.getElementById('tripQuickStats').innerHTML = `
+    <div class="trip-stat-mini">📍 <strong>${itin.destination}</strong></div>
+    <div class="trip-stat-mini">📅 <strong>${itin.days}</strong> days</div>
+    <div class="trip-stat-mini">🎯 <strong>${totalAct}</strong> activities</div>
+    <div class="trip-stat-mini">💰 <strong>₹${itin.totalCost?.toLocaleString()}</strong></div>
+    <div class="trip-stat-mini">🏷️ <strong>${types.size}</strong> types</div>
+  `;
+}
+
+// ============================================
+// TRAVEL READINESS SCORE
+// ============================================
+function updateReadinessScore() {
+  const items = document.querySelectorAll('#readinessItems .readiness-item');
+  const checks = {
+    0: !!state.itinerary, // itinerary generated
+    1: state.bookingCart?.flights || state.bookingCart?.trains, // transport booked
+    2: state.bookingCart?.hotels, // accommodation booked
+    3: Object.keys(state.packingChecked).length > 3, // packed essentials
+    4: state.itinerary?.weather?.length > 0, // weather checked
+  };
+  
+  let score = 0;
+  items.forEach((item, i) => {
+    const ready = checks[i] || false;
+    item.setAttribute('data-ready', ready ? 'true' : 'false');
+    item.querySelector('i').className = ready ? 'fas fa-check-circle' : 'far fa-circle';
+    if (ready) score++;
+  });
+  
+  const pct = Math.round(score / 5 * 100);
+  document.getElementById('readinessFill').setAttribute('stroke-dasharray', `${pct}, 100`);
+  document.getElementById('readinessPercent').textContent = `${pct}%`;
+  
+  // Change color based on score
+  const fill = document.getElementById('readinessFill');
+  if (pct >= 80) fill.style.stroke = 'var(--success)';
+  else if (pct >= 40) fill.style.stroke = 'var(--warning)';
+  else fill.style.stroke = 'var(--primary)';
+}

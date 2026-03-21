@@ -392,3 +392,51 @@ a{color:var(--primary);text-decoration:none}
   .persona-grid{grid-template-columns:repeat(2,1fr)}
   .map-container{height:300px}
 }
+
+/* Smart Automations */
+.auto-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.auto-btn{justify-content:flex-start;font-size:0.75rem;padding:8px 10px;background:var(--bg-3);border:1px solid var(--border);transition:all 0.2s}
+.auto-btn:hover{background:var(--primary-glow);border-color:var(--primary);color:var(--primary)}
+.auto-result{margin-top:10px;padding:10px;background:var(--bg-3);border-radius:var(--radius-sm);font-size:0.82rem;color:var(--text-2);border-left:3px solid var(--success);max-height:200px;overflow-y:auto}
+
+/* Travel Readiness */
+.readiness-score{display:flex;align-items:center;gap:16px}
+.readiness-ring{width:80px;height:80px;flex-shrink:0}
+.readiness-svg{width:100%;height:100%}
+.readiness-bg{fill:none;stroke:var(--bg-4);stroke-width:3}
+.readiness-fill{fill:none;stroke:var(--primary);stroke-width:3;stroke-linecap:round;transition:stroke-dasharray 0.5s ease}
+.readiness-text{fill:var(--text-1);font-size:8px;font-weight:800;text-anchor:middle}
+.readiness-items{flex:1;display:flex;flex-direction:column;gap:4px}
+.readiness-item{font-size:0.75rem;color:var(--text-3);display:flex;align-items:center;gap:6px}
+.readiness-item[data-ready="true"]{color:var(--success);text-decoration:line-through}
+.readiness-item[data-ready="true"] i{color:var(--success)}
+
+/* Smart Suggestions */
+.smart-suggestions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.suggestion-card{background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;cursor:pointer;transition:all 0.2s;font-size:0.82rem}
+.suggestion-card:hover{border-color:var(--primary);transform:translateY(-2px)}
+.suggestion-icon{font-size:1.2rem;margin-bottom:4px}
+.suggestion-title{font-weight:600;margin-bottom:2px}
+.suggestion-desc{font-size:0.72rem;color:var(--text-3)}
+.suggestion-tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:0.65rem;background:rgba(102,126,234,0.15);color:var(--primary);margin-top:4px}
+
+/* Trip Countdown */
+.trip-countdown-panel{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius)}
+.countdown-box{text-align:center;padding:8px 20px;background:var(--gradient);border-radius:var(--radius-sm);color:#fff}
+.countdown-value{font-size:1.8rem;font-weight:900;line-height:1}
+.countdown-label{font-size:0.7rem;opacity:0.8}
+.trip-quick-stats{display:flex;gap:12px;flex-wrap:wrap}
+.trip-stat-mini{font-size:0.78rem;color:var(--text-2);display:flex;align-items:center;gap:4px}
+.trip-stat-mini strong{color:var(--text-1)}
+.trip-actions-mini{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Atlas map background */
+[data-theme="dark"] #atlasMap{background:#1a1c2e !important}
+#atlasMap .leaflet-container{background:#f2f3f5 !important}
+[data-theme="dark"] #atlasMap .leaflet-container{background:#1a1c2e !important}
+
+/* Chatbot welcome state */
+.chat-welcome{text-align:center;padding:20px 12px;color:var(--text-3)}
+.chat-welcome-icon{font-size:2rem;margin-bottom:8px}
+.chat-welcome-title{font-weight:600;font-size:0.9rem;color:var(--text-1);margin-bottom:4px}
+.chat-welcome-text{font-size:0.78rem;line-height:1.5}
