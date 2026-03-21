@@ -118,16 +118,17 @@ async function fetchPlacePhoto(name, type, wikiTitle) {
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Apply theme first
   applyTheme();
-  // 2. Initialize map IMMEDIATELY — this is the critical fix
-  initMap();
+  // 2. Initialize map IMMEDIATELY
+  setTimeout(() => initMap(), 0);
   // 3. Force map to render properly after DOM is ready
   setTimeout(() => {
     if (state.map) {
       state.map.invalidateSize();
-      // Ensure tile layer is loaded
       setMapLayer();
     }
-  }, 100);
+  }, 200);
+  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 500);
+  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 1000);
   // 4. Render UI components
   renderAgentCards();
   renderBayesian();
@@ -139,6 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
   updateAtlasStats();
   // 5. Fetch initial AI state from backend
   fetchAIState();
+  // 6. Set up chatbot enter key
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+  }
 });
 
 function applyTheme() {
@@ -177,14 +183,27 @@ function initMap() {
   const mapEl = document.getElementById('map');
   if (!mapEl) { console.error('Map element not found'); return; }
   
-  // Ensure map container has dimensions
+  // Ensure map container has explicit dimensions
   mapEl.style.height = '100%';
   mapEl.style.width = '100%';
+  mapEl.style.minHeight = '400px';
   
-  // Create map
+  // Set background color for immediate visual feedback
+  const bgColor = state.theme === 'dark' ? '#1a1c2e' : '#f2f3f5';
+  mapEl.style.backgroundColor = bgColor;
+  
+  // Remove any existing map instance
+  if (state.map) {
+    try { state.map.remove(); } catch(e) {}
+    state.map = null;
+  }
+  
+  // Create map with proper initial config
   state.map = L.map('map', { 
     zoomControl: false,
     attributionControl: true,
+    fadeAnimation: true,
+    zoomAnimation: true,
   }).setView([20.5937, 78.9629], 5);
   
   L.control.zoom({ position: 'bottomleft' }).addTo(state.map);
@@ -194,9 +213,11 @@ function initMap() {
   setMapLayer();
   state.mapInitialized = true;
   
-  // Force a resize after a brief delay to ensure tiles load
-  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 200);
-  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 500);
+  // Multiple resize attempts to ensure tiles load
+  [100, 300, 600, 1200].forEach(ms => {
+    setTimeout(() => { if (state.map) state.map.invalidateSize(); }, ms);
+  });
+  
   console.log('Map initialized with layer:', state.mapLayer);
 }
 function setMapLayer() {
@@ -204,8 +225,9 @@ function setMapLayer() {
   if (state.mapTileLayer) {
     try { state.map.removeLayer(state.mapTileLayer); } catch(e) {}
   }
+  // NOMAD-style tiles: CartoDB voyager for light, CartoDB dark_all for dark
   const urls = {
-    light: 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png',
+    light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
@@ -214,8 +236,14 @@ function setMapLayer() {
   state.mapTileLayer = L.tileLayer(url, {
     attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> & <a href="https://carto.com">CartoDB</a>',
     maxZoom: 19,
-    subdomains: 'abcd'
+    subdomains: 'abcd',
+    detectRetina: true,
   }).addTo(state.map);
+  // Update map background to match tile style
+  const mapEl = document.getElementById('map');
+  if (mapEl) {
+    mapEl.style.backgroundColor = state.mapLayer === 'dark' ? '#1a1c2e' : '#f2f3f5';
+  }
   console.log('Map layer set to:', state.mapLayer);
 }
 function toggleMapLayer() {
@@ -1203,7 +1231,16 @@ function renderBookingResults(title, results, type) {
   const titleEl = document.getElementById('bookingResultsTitle');
   const list = document.getElementById('bookingResultsList');
   panel.style.display = 'block';
-  titleEl.innerHTML = `<i class="fas fa-search"></i> ${title}`;
+  titleEl.innerHTML = `<i class="fas fa-search"></i> ${title} <span class="text-xs text-muted">(${results.length} options)</span>`;
+
+  const renderPlatforms = (platforms, defaultUrl, defaultName) => {
+    const links = platforms || [{name:defaultName, url:defaultUrl}];
+    return `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">
+      ${links.map(p => `<a href="${p.url}" target="_blank" rel="noopener" class="tag tag-info" style="text-decoration:none;cursor:pointer;font-size:0.72rem" title="${p.prefilled ? 'Pre-filled with your trip details — just confirm and pay!' : 'Search on '+p.name}">
+        🔗 ${p.name} ${p.prefilled ? '<span style="color:var(--success);font-weight:700">✓</span>' : ''}
+      </a>`).join('')}
+    </div>`;
+  };
 
   if (type === 'flight') {
     list.innerHTML = results.map(f => `
@@ -1211,9 +1248,7 @@ function renderBookingResults(title, results, type) {
         <div class="booking-card-title">${f.airline} — ${f.flight_no}</div>
         <div class="booking-card-price">₹${f.price.toLocaleString()}</div>
         <div class="booking-card-meta">${f.departure} → ${f.arrival} · ${f.duration} · ${f.class} · ${f.stops===0?'Non-stop':f.stops+' stop(s)'} · ⭐ ${f.rating}</div>
-        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
-          ${(f.bookingPlatforms||[{name:'Google Flights',url:f.bookingUrl}]).map(p => `<a href="${p.url}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 ${p.name}</a>`).join('')}
-        </div>
+        ${renderPlatforms(f.bookingPlatforms, '#', 'Google Flights')}
       </div>
     `).join('');
   } else if (type === 'train') {
@@ -1222,9 +1257,7 @@ function renderBookingResults(title, results, type) {
         <div class="booking-card-title">${t.train_name} — ${t.train_no}</div>
         <div class="booking-card-price">₹${t.price.toLocaleString()}</div>
         <div class="booking-card-meta">${t.departure} · ${t.duration} · Class: ${t.class}</div>
-        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
-          ${(t.bookingPlatforms||[{name:'IRCTC',url:t.bookingUrl}]).map(p => `<a href="${p.url}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 ${p.name}</a>`).join('')}
-        </div>
+        ${renderPlatforms(t.bookingPlatforms, t.bookingUrl, 'IRCTC')}
       </div>
     `).join('');
   } else if (type === 'hotel') {
@@ -1232,10 +1265,8 @@ function renderBookingResults(title, results, type) {
       <div class="booking-card" onclick="selectBooking('hotels',${JSON.stringify(h).replace(/"/g,'&quot;')},this)">
         <div class="booking-card-title">${h.name} ${'⭐'.repeat(h.stars)}</div>
         <div class="booking-card-price">₹${h.price_per_night.toLocaleString()}/night</div>
-        <div class="booking-card-meta">Total: ₹${h.total_price.toLocaleString()} · Rating: ${h.rating} · ${h.amenities.join(', ')}</div>
-        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">
-          ${(h.bookingPlatforms||[{name:'Booking.com',url:h.bookingUrl}]).map(p => `<a href="${p.url}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 ${p.name}</a>`).join('')}
-        </div>
+        <div class="booking-card-meta">Total: ₹${h.total_price.toLocaleString()} · Rating: ${h.rating} · ${h.amenities.slice(0,4).join(', ')}${h.amenities.length>4 ? ' +more' : ''}</div>
+        ${renderPlatforms(h.bookingPlatforms, h.bookingUrl, 'Booking.com')}
       </div>
     `).join('');
   } else if (type === 'cab') {
@@ -1395,21 +1426,40 @@ async function doReplan() {
   if (!state.itinerary) { showToast('Generate a trip first!', 'error'); return; }
   const reason = document.getElementById('replanReason').value;
   const day = parseInt(document.getElementById('replanDay').value) || 1;
+  
+  if (day > (state.itinerary.days_data?.length || 0)) {
+    showToast(`Invalid day! Your trip has ${state.itinerary.days_data.length} days.`, 'error');
+    return;
+  }
+  
   showLoading(true);
+  addLog('planner', `🚨 Emergency replan initiated: ${reason} on Day ${day}`);
+  
   try {
     const r = await fetch(`${API_BASE}/api/replan`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ itinerary: state.itinerary, reason, day, delayHours: parseInt(document.getElementById('delayHours').value)||4 })
+      body: JSON.stringify({ 
+        itinerary: state.itinerary, reason, day, 
+        delayHours: parseInt(document.getElementById('delayHours')?.value)||4 
+      })
     });
     const d = await r.json();
     if (d.success) {
       state.itinerary = d.itinerary;
       renderItinerary(d.itinerary);
       renderMap(d.itinerary);
-      showToast(`✅ Day ${day} replanned for ${reason}!`, 'success');
-      addLog('planner', `Emergency replan: ${reason} on Day ${day}`);
+      
+      // Show replan log
+      if (d.replanLog?.length) {
+        d.replanLog.forEach(msg => addLog('planner', `✅ ${msg}`));
+      }
+      
+      showToast(`✅ Day ${day} replanned for "${reason}"! ${d.replanLog?.[0] || ''}`, 'success');
+      addConvoMessage('planner', `✅ Emergency replan complete for Day ${day} (${reason}). ${d.replanLog?.join('. ') || ''}`);
+    } else {
+      showToast(d.error || 'Replan failed', 'error');
     }
-  } catch(e) { showToast('Replan failed', 'error'); }
+  } catch(e) { showToast('Replan failed: ' + e.message, 'error'); }
   showLoading(false);
   closeModal('replanModal');
 }
@@ -1469,28 +1519,56 @@ async function planHalfDay() {
 }
 
 // ============================================
-// NEARBY PLACES
+// NEARBY PLACES — Quality results with real data
 // ============================================
 async function findNearbyPlaces() {
-  if (!navigator.geolocation) { showToast('Geolocation not supported', 'error'); return; }
-  showToast('Finding nearby places...', 'info');
-  navigator.geolocation.getCurrentPosition(async (pos) => {
+  // Try browser geolocation first, fallback to itinerary location
+  const searchNearby = async (lat, lon) => {
+    showToast('🔍 Searching nearby places...', 'info');
     try {
-      const r = await fetch(`${API_BASE}/api/nearby?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&radius=3000`);
+      const r = await fetch(`${API_BASE}/api/nearby?lat=${lat}&lon=${lon}&radius=5000`);
       const d = await r.json();
       if (d.success && d.places?.length) {
         const panel = document.getElementById('nearbyPanel');
         panel.style.display = 'block';
         document.getElementById('nearbyContainer').innerHTML = d.places.map(p => `
-          <div class="activity-card" style="margin-bottom:6px;cursor:pointer" onclick="openPlaceModal('${p.name.replace(/'/g,"\\'")}',${p.lat},${p.lon},'${p.type}','')">
-            <div style="font-size:1.5rem;width:40px;text-align:center">${getTypeEmoji(p.type)}</div>
-            <div class="activity-info"><div class="activity-name">${p.name}</div><div class="activity-desc">${p.type}</div></div>
+          <div class="activity-card" style="margin-bottom:8px;cursor:pointer" onclick="openPlaceModal('${p.name.replace(/'/g,"\\'")}',${p.lat},${p.lon},'${(p.type||'').replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").substring(0,80)}')">
+            <div style="font-size:1.5rem;width:44px;text-align:center;flex-shrink:0">${getTypeEmoji(p.type)}</div>
+            <div class="activity-info">
+              <div class="activity-name">${p.name}</div>
+              <div class="activity-desc">${p.description || p.type}</div>
+              <div class="activity-tags">
+                <span class="tag tag-type">${p.type?.replace(/_/g,' ') || 'place'}</span>
+                ${p.distance ? `<span class="tag tag-info">📍 ${p.distance < 1000 ? p.distance+'m' : (p.distance/1000).toFixed(1)+'km'}</span>` : ''}
+                ${p.rating ? `<span class="tag tag-cost">⭐ ${typeof p.rating === 'number' ? p.rating.toFixed(1) : p.rating}</span>` : ''}
+                ${p.opening_hours ? `<span class="tag tag-time">🕐 ${p.opening_hours}</span>` : ''}
+              </div>
+            </div>
           </div>
         `).join('');
-        showToast(`Found ${d.places.length} nearby places!`, 'success');
-      } else { showToast('No places found nearby', 'info'); }
-    } catch(e) { showToast('Nearby search failed', 'error'); }
-  }, () => showToast('Location access denied', 'error'));
+        showToast(`📍 Found ${d.places.length} places nearby!`, 'success');
+      } else { showToast('No places found nearby. Try generating a trip first!', 'info'); }
+    } catch(e) { showToast('Nearby search failed: ' + e.message, 'error'); }
+  };
+
+  // Try geolocation
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => searchNearby(pos.coords.latitude, pos.coords.longitude),
+      () => {
+        // Fallback: use itinerary destination coordinates
+        if (state.itinerary?.destCoords?.lat) {
+          searchNearby(state.itinerary.destCoords.lat, state.itinerary.destCoords.lon);
+        } else {
+          showToast('Enable location access or generate a trip first!', 'error');
+        }
+      }
+    );
+  } else if (state.itinerary?.destCoords?.lat) {
+    searchNearby(state.itinerary.destCoords.lat, state.itinerary.destCoords.lon);
+  } else {
+    showToast('Generate a trip first, then search nearby!', 'error');
+  }
 }
 
 // ============================================
@@ -1508,20 +1586,44 @@ async function sendChat() {
   input.value = '';
 
   const messages = document.getElementById('chatMessages');
-  messages.innerHTML += `<div class="chat-msg user"><div class="chat-msg-bubble">${msg}</div></div>`;
+  messages.innerHTML += `<div class="chat-msg user"><div class="chat-msg-bubble">${escapeHtml(msg)}</div></div>`;
+  messages.scrollTop = messages.scrollHeight;
+
+  // Show typing indicator
+  const typingId = 'typing-' + Date.now();
+  messages.innerHTML += `<div class="chat-msg bot" id="${typingId}"><div class="chat-msg-avatar">🧠</div><div class="chat-msg-bubble"><em style="color:var(--text-3)">Thinking...</em></div></div>`;
   messages.scrollTop = messages.scrollHeight;
 
   try {
     const r = await fetch(`${API_BASE}/api/chat`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({message: msg, context:{destination:state.currentDest}})
+      body: JSON.stringify({message: msg, context:{destination:state.currentDest, origin:state.currentOrigin, budget:state.budget?.total}})
     });
     const d = await r.json();
-    messages.innerHTML += `<div class="chat-msg bot"><div class="chat-msg-avatar">🧠</div><div class="chat-msg-bubble">${d.response?.replace(/\n/g,'<br>')}</div></div>`;
+    
+    // Remove typing indicator
+    const typingEl = document.getElementById(typingId);
+    if (typingEl) typingEl.remove();
+    
+    // Format markdown-style response
+    let formatted = (d.response || 'Sorry, something went wrong.')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>')
+      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" style="color:var(--primary)">$1</a>');
+    
+    messages.innerHTML += `<div class="chat-msg bot"><div class="chat-msg-avatar">🧠</div><div class="chat-msg-bubble">${formatted}</div></div>`;
   } catch(e) {
-    messages.innerHTML += `<div class="chat-msg bot"><div class="chat-msg-avatar">🧠</div><div class="chat-msg-bubble">Sorry, I'm having trouble connecting. Please try again!</div></div>`;
+    const typingEl = document.getElementById(typingId);
+    if (typingEl) typingEl.remove();
+    messages.innerHTML += `<div class="chat-msg bot"><div class="chat-msg-avatar">🧠</div><div class="chat-msg-bubble">Sorry, I'm having trouble connecting. Please check if the backend is running and try again!</div></div>`;
   }
   messages.scrollTop = messages.scrollHeight;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function sendSuggestion(text) {

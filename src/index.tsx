@@ -318,7 +318,12 @@ const CITY_COORDS: Record<string, [number,number]> = {
   darjeeling:[27.041,88.2663],gangtok:[27.3389,88.6065],leh:[34.1526,77.5771],srinagar:[34.0837,74.7973],
   amritsar:[31.6340,74.8723],jodhpur:[26.2389,73.0243],pushkar:[26.4897,74.5511],ranthambore:[26.0173,76.5026],
   rishikesh:[30.0869,78.2676],haridwar:[29.9457,78.1642],tirupati:[13.6288,79.4192],rameshwaram:[9.2876,79.3129],
-  madurai:[9.9252,78.1198],thanjavur:[10.787,79.1378],kodaikanal:[10.2381,77.4892]
+  madurai:[9.9252,78.1198],thanjavur:[10.787,79.1378],kodaikanal:[10.2381,77.4892],
+  trichy:[10.7905,78.7047],tiruchirappalli:[10.7905,78.7047],
+  'greater noida':[28.4744,77.5040],noida:[28.5355,77.3910],gurgaon:[28.4595,77.0266],
+  amaravati:[16.5062,80.6480],vijayawada:[16.5062,80.6480],visakhapatnam:[17.6868,83.2185],
+  chandigarh:[30.7333,76.7794],pune:[18.5204,73.8567],ahmedabad:[23.0225,72.5714],coimbatore:[11.0168,76.9558],
+  thiruvananthapuram:[8.5241,76.9366],vellore:[12.9165,79.1325],
 }
 
 // Curated top attractions per city — ensures major tourist spots are always included
@@ -439,29 +444,118 @@ const CITY_TOP_ATTRACTIONS: Record<string, any[]> = {
     {name:'St. Francis Church',lat:9.9641,lon:76.2418,type:'historic',description:'Oldest European church in India, originally built in 1503.',wikiTitle:"St. Francis Church, Kochi"},
     {name:'Jew Town Kochi',lat:9.9572,lon:76.2602,type:'market',description:'Historic area with a 16th-century synagogue and antique shops.',wikiTitle:'Paradesi Synagogue'},
   ],
+  trichy: [
+    {name:'Rockfort Temple',lat:10.8085,lon:78.6946,type:'temple',description:'Ancient rock-cut temple atop a 83m rock, iconic landmark of Tiruchirappalli.',wikiTitle:'Rockfort'},
+    {name:'Sri Ranganathaswamy Temple',lat:10.8627,lon:78.6892,type:'temple',description:'One of the largest functioning Hindu temples in the world, dedicated to Lord Vishnu.',wikiTitle:'Ranganathaswamy Temple, Srirangam'},
+    {name:'Jambukeswarar Temple',lat:10.8537,lon:78.7072,type:'temple',description:'Ancient Shiva temple on Srirangam island, one of the Pancha Bhootha Sthalams.',wikiTitle:'Jambukeswarar Temple, Thiruvanaikaval'},
+    {name:'Ucchi Pillayar Temple',lat:10.8090,lon:78.6950,type:'temple',description:'Temple dedicated to Lord Ganesha at the top of Rock Fort with panoramic views.',wikiTitle:'Ucchi Pillayar Temple'},
+    {name:'Kallanai Dam',lat:10.8319,lon:78.8289,type:'historic',description:'Grand Anicut — one of the oldest water-diversion structures in the world, built by Cholas.',wikiTitle:'Kallanai'},
+    {name:'Government Museum Trichy',lat:10.8052,lon:78.6887,type:'museum',description:'Museum housing ancient artifacts, sculptures, and geological specimens.',wikiTitle:'Government Museum, Tiruchirappalli'},
+  ],
+  'greater noida': [
+    {name:'India Expo Centre',lat:28.4611,lon:77.5133,type:'attraction',description:'One of the largest exhibition centers in South Asia.',wikiTitle:'India Expo Centre and Mart'},
+    {name:'Buddh International Circuit',lat:28.3484,lon:77.5338,type:'attraction',description:'Formula 1 racing circuit, one of the finest in Asia.',wikiTitle:'Buddh International Circuit'},
+    {name:'Surajpur Bird Sanctuary',lat:28.5017,lon:77.5033,type:'park',description:'Wetland bird sanctuary with over 180 bird species.',wikiTitle:'Surajpur Wetland'},
+    {name:'Great India Place Mall',lat:28.5686,lon:77.3234,type:'market',description:'One of the largest malls in North India with entertainment and shopping.',wikiTitle:'The Great India Place'},
+    {name:'Akshardham Temple',lat:28.6127,lon:77.2773,type:'temple',description:'Spectacular Hindu temple complex showcasing Indian culture (nearby in Delhi).',wikiTitle:'Akshardham (Delhi)'},
+    {name:'Worlds of Wonder',lat:28.5686,lon:77.3234,type:'attraction',description:'Amusement and water park with thrilling rides.',wikiTitle:'Worlds of Wonder (amusement park)'},
+  ],
+  amaravati: [
+    {name:'Amaravati Stupa',lat:16.5725,lon:80.3572,type:'monument',description:'Ancient Buddhist stupa, one of the most important Buddhist sites in India.',wikiTitle:'Amaravati Stupa'},
+    {name:'Undavalli Caves',lat:16.4961,lon:80.5810,type:'historic',description:'Rock-cut cave temples dating to 4th-5th century with monolithic Vishnu statue.',wikiTitle:'Undavalli Caves'},
+    {name:'Prakasam Barrage',lat:16.5086,lon:80.6148,type:'viewpoint',description:'Dam across Krishna River connecting Vijayawada and Guntur.',wikiTitle:'Prakasam Barrage'},
+    {name:'Kanaka Durga Temple',lat:16.5170,lon:80.6095,type:'temple',description:'Famous hilltop temple dedicated to Goddess Durga on Indrakeeladri hill.',wikiTitle:'Kanaka Durga Temple'},
+    {name:'Bhavani Island',lat:16.5106,lon:80.5972,type:'attraction',description:'Largest river island in Krishna river with boating and water sports.',wikiTitle:'Bhavani Island'},
+    {name:'Mangalagiri Temple',lat:16.4319,lon:80.5619,type:'temple',description:'Ancient hilltop temple dedicated to Lord Narasimha.',wikiTitle:'Mangalagiri'},
+  ],
 }
 
-async function geocode(place: string): Promise<{lat:number,lon:number,name:string}> {
-  const key = place.toLowerCase().trim().replace(/[,.\-]/g,'').replace(/\s+/g,' ')
-  for (const [city, [lat,lon]] of Object.entries(CITY_COORDS)) {
-    if (key.includes(city)) return {lat,lon,name:place}
+// CAMPUS + INSTITUTION MAPPING — resolves campus names to their actual city
+const CAMPUS_MAP: Record<string, {city:string, lat:number, lon:number, label:string}> = {
+  'srm university':{city:'Chennai',lat:12.8231,lon:80.0442,label:'SRM University, Kattankulathur (Chennai)'},
+  'srm kattankulathur':{city:'Chennai',lat:12.8231,lon:80.0442,label:'SRM Kattankulathur Campus (Chennai)'},
+  'srmist':{city:'Chennai',lat:12.8231,lon:80.0442,label:'SRMIST Main Campus (Chennai)'},
+  'srm chennai':{city:'Chennai',lat:12.8231,lon:80.0442,label:'SRM Chennai Campus'},
+  'srm trichy':{city:'Trichy',lat:10.7578,lon:78.8154,label:'SRM Trichy Campus'},
+  'srm tiruchirappalli':{city:'Trichy',lat:10.7578,lon:78.8154,label:'SRM Trichy Campus'},
+  'srm ncr':{city:'Delhi NCR',lat:28.4744,lon:77.5040,label:'SRM NCR Campus (Greater Noida)'},
+  'srm delhi':{city:'Delhi NCR',lat:28.4744,lon:77.5040,label:'SRM Delhi NCR Campus (Greater Noida)'},
+  'srm delhi ncr':{city:'Delhi NCR',lat:28.4744,lon:77.5040,label:'SRM Delhi NCR Campus (Greater Noida)'},
+  'srm noida':{city:'Delhi NCR',lat:28.4744,lon:77.5040,label:'SRM NCR Campus (Greater Noida)'},
+  'srm greater noida':{city:'Delhi NCR',lat:28.4744,lon:77.5040,label:'SRM NCR Campus (Greater Noida)'},
+  'srm andhra':{city:'Amaravati',lat:16.4434,lon:80.5942,label:'SRM AP Campus (Amaravati)'},
+  'srm andhra pradesh':{city:'Amaravati',lat:16.4434,lon:80.5942,label:'SRM AP Campus (Amaravati)'},
+  'srm amaravati':{city:'Amaravati',lat:16.4434,lon:80.5942,label:'SRM AP Campus (Amaravati)'},
+  'srm ap':{city:'Amaravati',lat:16.4434,lon:80.5942,label:'SRM AP Campus (Amaravati)'},
+  'srm sikkim':{city:'Gangtok',lat:27.3314,lon:88.6138,label:'SRM Sikkim Campus (Gangtok)'},
+  'iit madras':{city:'Chennai',lat:12.9916,lon:80.2336,label:'IIT Madras (Chennai)'},
+  'iit bombay':{city:'Mumbai',lat:19.1334,lon:72.9133,label:'IIT Bombay (Mumbai)'},
+  'iit delhi':{city:'Delhi',lat:28.5456,lon:77.1926,label:'IIT Delhi'},
+  'vit vellore':{city:'Vellore',lat:12.9692,lon:79.1559,label:'VIT Vellore'},
+  'bits pilani':{city:'Pilani',lat:28.3643,lon:75.5870,label:'BITS Pilani'},
+  'anna university':{city:'Chennai',lat:13.0108,lon:80.2354,label:'Anna University (Chennai)'},
+  'nit trichy':{city:'Trichy',lat:10.7601,lon:78.8137,label:'NIT Trichy'},
+}
+
+// Smart geocoding with campus/institution resolution
+function resolveCampus(input: string): {city:string, lat:number, lon:number, label:string} | null {
+  const key = input.toLowerCase().trim().replace(/[,.\-]/g,' ').replace(/\s+/g,' ').trim()
+  
+  // Pattern matching FIRST for multi-word patterns (higher priority)
+  const srmMatch = key.match(/srm\s*(?:university|ist|institute)?\s*(?:,?\s*)(trichy|tiruchirappalli|tiruchi)/i)
+  if (srmMatch) return CAMPUS_MAP['srm trichy']
+  const srmNcr = key.match(/srm\s*(?:university|ist|institute)?\s*(?:,?\s*)(ncr|delhi|noida|greater\s*noida)/i)
+  if (srmNcr) return CAMPUS_MAP['srm ncr']
+  const srmAp = key.match(/srm\s*(?:university|ist|institute)?\s*(?:,?\s*)(andhra|ap|amaravati|guntur)/i)
+  if (srmAp) return CAMPUS_MAP['srm andhra']
+  const srmSikkim = key.match(/srm\s*(?:university|ist|institute)?\s*(?:,?\s*)(sikkim|gangtok)/i)
+  if (srmSikkim) return CAMPUS_MAP['srm sikkim']
+  const srmChennai = key.match(/srm\s*(?:university|ist|institute)?\s*(?:,?\s*)(chennai|kattankulathur|chengalpattu)/i)
+  if (srmChennai) return CAMPUS_MAP['srmist']
+  
+  // Direct campus match (exact key lookup)
+  for (const [campus, info] of Object.entries(CAMPUS_MAP)) {
+    if (key === campus || key.includes(campus)) return info
   }
+  
+  // Bare "srm" without any location specifier → default to Kattankulathur
+  if (/^srm\b/.test(key) && !key.includes('nagar')) return CAMPUS_MAP['srmist']
+  return null
+}
+
+async function geocode(place: string): Promise<{lat:number,lon:number,name:string,resolvedCity?:string}> {
+  const key = place.toLowerCase().trim().replace(/[,.\-]/g,' ').replace(/\s+/g,' ').trim()
+  
+  // 1. Check campus/institution mapping FIRST
+  const campus = resolveCampus(key)
+  if (campus) return { lat: campus.lat, lon: campus.lon, name: campus.label, resolvedCity: campus.city }
+  
+  // 2. Check known city coordinates — longest match first
+  const sortedCities = Object.entries(CITY_COORDS).sort((a,b) => b[0].length - a[0].length)
+  for (const [city, [lat,lon]] of sortedCities) {
+    if (key.includes(city) || city.includes(key)) return {lat,lon,name:place, resolvedCity: city}
+  }
+  
+  // 3. Nominatim fallback
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&format=json&limit=1`, {headers:{'User-Agent':'SmartRouteSRMIST/3.0'}})
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&format=json&limit=1`, {headers:{'User-Agent':'SmartRouteSRMIST/4.0'}})
     const d: any = await r.json()
-    if (d.length) return {lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon),name:d[0].display_name?.split(',')[0]||place}
+    if (d.length) return {lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon),name:d[0].display_name?.split(',')[0]||place, resolvedCity: d[0].display_name?.split(',')[0]||place}
   } catch(e) {}
-  return {lat:13.0827,lon:80.2707,name:place}
+  
+  return {lat:20.5937,lon:78.9629,name:place, resolvedCity: place}
 }
 
 async function fetchAttractions(lat: number, lon: number, city: string, days: number): Promise<any[]> {
   const needed = days * 5
-  const cityKey = city.toLowerCase().trim().replace(/[^a-z]/g,'')
+  const cityKey = city.toLowerCase().trim().replace(/[^a-z\s]/g,'').replace(/\s+/g,' ')
   
   // 1. Start with curated top attractions for known cities
   let places: any[] = []
   for (const [key, attractions] of Object.entries(CITY_TOP_ATTRACTIONS)) {
-    if (cityKey.includes(key) || key.includes(cityKey)) {
+    // Check if cityKey matches, or if the campus-resolved city matches
+    if (cityKey.includes(key) || key.includes(cityKey) || 
+        cityKey.split(' ').some(w => w.length > 3 && key.includes(w))) {
       places = [...attractions]
       break
     }
@@ -828,7 +922,10 @@ function generateFlights(origin: string, dest: string, date: string): any[] {
     {name:'AirAsia India',code:'I5',base:1.5,rating:3.7},
     {name:'Akasa Air',code:'QP',base:1.7,rating:4.1},
   ]
-  const searchUrl = `https://www.google.com/travel/flights?q=flights+from+${encodeURIComponent(origin)}+to+${encodeURIComponent(dest)}${date ? `+on+${date}` : ''}`
+  // Pre-filled search URLs with actual trip details
+  const dateParam = date || new Date().toISOString().split('T')[0]
+  const oEnc = encodeURIComponent(origin)
+  const dEnc = encodeURIComponent(dest)
   
   return airlines.map((airline, i) => {
     const basePrice = Math.round(dist * airline.base + 500 + (Math.random() * 400 - 200))
@@ -852,15 +949,14 @@ function generateFlights(origin: string, dest: string, date: string): any[] {
       duration: `${durH}h ${durM}m`, price, currency: '₹',
       class: cls.type,
       stops: isNonstop ? 0 : (Math.random() > 0.6 ? 1 : 0),
-      bookingUrl: searchUrl,
       rating: airline.rating.toFixed(1),
       bookingPlatforms: [
-        {name:'Google Flights', url: searchUrl, icon:'google'},
-        {name:'MakeMyTrip', url: `https://www.makemytrip.com/flight/search?fromCity=${encodeURIComponent(origin)}&toCity=${encodeURIComponent(dest)}`},
-        {name:'Skyscanner', url: `https://www.skyscanner.co.in/transport/flights/${encodeURIComponent(origin)}/${encodeURIComponent(dest)}/`},
-        {name:'ixigo', url: `https://www.ixigo.com/search/result/flight?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
-        {name:'Cleartrip', url: `https://www.cleartrip.com/flights/results?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
-        {name:'EaseMyTrip', url: `https://flight.easemytrip.com/FlightList/Index?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
+        {name:'Google Flights', url: `https://www.google.com/travel/flights?q=flights+from+${oEnc}+to+${dEnc}+on+${dateParam}&curr=INR`, icon:'google', prefilled:true},
+        {name:'MakeMyTrip', url: `https://www.makemytrip.com/flight/search?itinerary=${oEnc}-${dEnc}-${dateParam.replace(/-/g,'/')}&tripType=O&paxType=A-1_C-0_I-0&intl=false&cabinClass=E`, prefilled:true},
+        {name:'Skyscanner', url: `https://www.skyscanner.co.in/transport/flights/${oEnc}/${dEnc}/${dateParam.replace(/-/g,'')}/?adultsv2=1&cabinclass=economy&childrenv2=&ref=home`, prefilled:true},
+        {name:'ixigo', url: `https://www.ixigo.com/search/result/flight?from=${oEnc}&to=${dEnc}&date=${dateParam}&adults=1&children=0&infants=0&class=e&source=Search+Form`, prefilled:true},
+        {name:'Cleartrip', url: `https://www.cleartrip.com/flights/results?adults=1&childs=0&infants=0&class=Economy&depart_date=${dateParam}&from=${oEnc}&to=${dEnc}&intl=false`, prefilled:true},
+        {name:'EaseMyTrip', url: `https://flight.easemytrip.com/FlightList/Index?from=${oEnc}&to=${dEnc}&ddate=${dateParam}&isow=true&isdm=true&adult=1&child=0&infant=0&sc=E`, prefilled:true},
       ]
     }
   }).sort((a,b) => a.price - b.price)
@@ -928,7 +1024,10 @@ function generateHotels(city: string, days: number, persona: string): any[] {
   
   let hotels = persona === 'luxury' ? [...luxury_hotels, ...mid_hotels] : persona === 'adventure' ? [...budget_hotels, ...mid_hotels] : [...budget_hotels, ...mid_hotels, ...luxury_hotels.slice(0,1)]
   
-  const searchUrl = `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(city)}&checkin=${new Date().toISOString().split('T')[0]}&checkout=${new Date(Date.now()+days*86400000).toISOString().split('T')[0]}`
+  const checkinDate = new Date().toISOString().split('T')[0]
+  const checkoutDate = new Date(Date.now()+days*86400000).toISOString().split('T')[0]
+  const cityEnc = encodeURIComponent(city)
+  const searchUrl = `https://www.booking.com/searchresults.html?ss=${cityEnc}&checkin=${checkinDate}&checkout=${checkoutDate}&group_adults=2&no_rooms=1`
   
   return hotels.map((h, i) => {
     const priceVariation = 0.8 + Math.random() * 0.4
@@ -940,12 +1039,12 @@ function generateHotels(city: string, days: number, persona: string): any[] {
       rating: h.rating.toFixed(1), amenities: h.amenities,
       bookingUrl: searchUrl,
       bookingPlatforms: [
-        {name:'Booking.com', url: searchUrl},
-        {name:'MakeMyTrip', url: `https://www.makemytrip.com/hotels/hotel-listing?city=${encodeURIComponent(city)}`},
-        {name:'Goibibo', url: `https://www.goibibo.com/hotels/hotels-in-${city.toLowerCase().replace(/\s+/g,'-')}/`},
-        {name:'Agoda', url: `https://www.agoda.com/search?city=${encodeURIComponent(city)}`},
-        {name:'Trivago', url: `https://www.trivago.in/en-IN/srl?search=${encodeURIComponent(city)}`},
-        {name:'OYO', url: `https://www.oyorooms.com/search?location=${encodeURIComponent(city)}`},
+        {name:'Booking.com', url: searchUrl, prefilled:true},
+        {name:'MakeMyTrip', url: `https://www.makemytrip.com/hotels/hotel-listing?city=${cityEnc}&checkin=${checkinDate.replace(/-/g,'')}&checkout=${checkoutDate.replace(/-/g,'')}&roomStayQualifier=2e0e`, prefilled:true},
+        {name:'Goibibo', url: `https://www.goibibo.com/hotels/hotels-in-${city.toLowerCase().replace(/\s+/g,'-')}/?checkin=${checkinDate}&checkout=${checkoutDate}&adults_count=2&rooms_count=1`, prefilled:true},
+        {name:'Agoda', url: `https://www.agoda.com/search?city=${cityEnc}&checkIn=${checkinDate}&checkOut=${checkoutDate}&rooms=1&adults=2`, prefilled:true},
+        {name:'Trivago', url: `https://www.trivago.in/en-IN/srl?search=${cityEnc}&dr=${checkinDate}--${checkoutDate}&pa=2`, prefilled:true},
+        {name:'OYO', url: `https://www.oyorooms.com/search?location=${cityEnc}&checkin=${checkinDate}&checkout=${checkoutDate}`, prefilled:true},
       ],
       image: '', currency: '₹',
     }
@@ -1160,8 +1259,11 @@ app.post('/api/generate-trip', async (c) => {
     origin ? geocode(origin) : Promise.resolve({lat:13.08,lon:80.27,name:'Chennai'})
   ])
   
+  // Use the resolved city name for attraction lookup (e.g., "SRM Trichy" → "Trichy")
+  const resolvedDest = destGeo.resolvedCity || destination
+  
   const [attractions, weather] = await Promise.all([
-    fetchAttractions(destGeo.lat, destGeo.lon, destination, duration),
+    fetchAttractions(destGeo.lat, destGeo.lon, resolvedDest, duration),
     fetchWeather(destGeo.lat, destGeo.lon, duration)
   ])
   
@@ -1170,12 +1272,12 @@ app.post('/api/generate-trip', async (c) => {
   const photos = await Promise.all(topPlaces.map(p => fetchWikiPhoto(p.wikiTitle || p.name)))
   topPlaces.forEach((p, i) => { if (photos[i]) p.photo = photos[i] })
   
-  const itinerary = buildItinerary(attractions, weather, duration, budget, destination, persona, origin, originGeo)
-  const langTips = getLanguageTips(destination)
+  const itinerary = buildItinerary(attractions, weather, duration, budget, destGeo.name || resolvedDest, persona, origin, originGeo)
+  const langTips = getLanguageTips(resolvedDest)
   const packingList = generatePackingList(duration, weather, persona)
-  const restaurants = generateRestaurants(destination, destGeo.lat, destGeo.lon)
-  const emergencyContacts = getEmergencyContacts(destination)
-  const safetyTips = getSafetyTips(destination, persona)
+  const restaurants = generateRestaurants(resolvedDest, destGeo.lat, destGeo.lon)
+  const emergencyContacts = getEmergencyContacts(resolvedDest)
+  const safetyTips = getSafetyTips(resolvedDest, persona)
   
   return c.json({
     success: true, itinerary, languageTips: langTips, packingList, restaurants,
@@ -1281,7 +1383,7 @@ app.get('/api/safety-tips', async (c) => {
   return c.json({success:true, tips: getSafetyTips(city, persona)})
 })
 
-// Emergency Replan
+// Emergency Replan — intelligent replanning with actual alternatives
 app.post('/api/replan', async (c) => {
   const { itinerary, reason='delay', day=1, delayHours=4, weatherRisk='rain', crowdLevel='high' } = await c.req.json()
   if (!itinerary?.days_data) return c.json({error:'No itinerary to replan'}, 400)
@@ -1289,42 +1391,138 @@ app.post('/api/replan', async (c) => {
   const dayData = itinerary.days_data[day-1]
   if (!dayData) return c.json({error:'Invalid day'}, 400)
   
+  const replanLog: string[] = []
+  
   if (reason === 'delay') {
     const trimCount = Math.ceil(delayHours / 2)
-    dayData.activities = dayData.activities.slice(0, -trimCount)
+    const removed = dayData.activities.splice(-trimCount)
+    replanLog.push(`Removed ${removed.length} activities due to ${delayHours}h delay: ${removed.map((a:any)=>a.name).join(', ')}`)
+    // Adjust remaining timings
     let h = 9 + delayHours
-    dayData.activities.forEach((a: any) => { a.time = `${String(Math.floor(h)).padStart(2,'0')}:${h%1?'30':'00'}`; h += parseFloat(a.duration) + 0.5 })
+    dayData.activities.forEach((a: any) => { 
+      a.time = `${String(Math.floor(h)).padStart(2,'0')}:${h%1>=0.5?'30':'00'}`
+      h += parseFloat(a.duration) + 0.5 
+    })
+    replanLog.push('Adjusted timings for remaining activities')
   } else if (reason === 'weather') {
-    dayData.activities = dayData.activities.filter((a: any) => !['beach','park','viewpoint','garden'].includes(a.type))
-    dayData.activities.forEach((a: any) => { a.weather_warning = '⚠️ Weather adjusted' })
+    const outdoorTypes = ['beach','park','viewpoint','garden','nature_reserve','hiking','trekking']
+    const outdoorActs = dayData.activities.filter((a:any) => outdoorTypes.some(t => (a.type||'').toLowerCase().includes(t)))
+    const indoorActs = dayData.activities.filter((a:any) => !outdoorTypes.some(t => (a.type||'').toLowerCase().includes(t)))
+    
+    if (outdoorActs.length > 0) {
+      // Replace outdoor with indoor alternatives
+      const indoorAlts = [
+        {name:'Local Museum Visit',type:'museum',description:'Explore local history and art in an indoor museum',cost:200,duration:'2h'},
+        {name:'Cultural Workshop',type:'cultural',description:'Attend a local cooking or craft workshop',cost:500,duration:'2h'},
+        {name:'Shopping District',type:'market',description:'Explore local markets and shopping areas',cost:300,duration:'1.5h'},
+        {name:'Indoor Food Tour',type:'food',description:'Sample local cuisine at popular restaurants',cost:400,duration:'1.5h'},
+        {name:'Temple/Heritage Visit',type:'temple',description:'Visit indoor heritage sites and temples',cost:100,duration:'1.5h'},
+        {name:'Spa & Wellness',type:'relaxation',description:'Relax at a local spa or wellness center',cost:800,duration:'2h'},
+      ]
+      let h = 9
+      const newActivities = indoorActs.map((a:any) => { 
+        a.weather_warning = ''
+        a.time = `${String(Math.floor(h)).padStart(2,'0')}:${h%1>=0.5?'30':'00'}`
+        h += parseFloat(a.duration) + 0.5
+        return a
+      })
+      for (let i = 0; i < outdoorActs.length && i < indoorAlts.length; i++) {
+        const alt = indoorAlts[i]
+        newActivities.push({
+          ...outdoorActs[i], name: alt.name, type: alt.type, description: alt.description,
+          cost: alt.cost, duration: alt.duration, weather_safe: true,
+          weather_warning: `✅ Replanned (was: ${outdoorActs[i].name})`,
+          time: `${String(Math.floor(h)).padStart(2,'0')}:${h%1>=0.5?'30':'00'}`,
+          crowd_level: 30 + Math.floor(Math.random()*20),
+        })
+        h += parseFloat(alt.duration) + 0.5
+      }
+      dayData.activities = newActivities
+      replanLog.push(`Replaced ${outdoorActs.length} outdoor activities with indoor alternatives`)
+    } else {
+      dayData.activities.forEach((a: any) => { a.weather_warning = '⚠️ Check weather before heading out' })
+      replanLog.push('No outdoor activities found; added weather warnings to all')
+    }
   } else if (reason === 'crowd') {
+    // Reverse order: visit popular spots at off-peak times
     dayData.activities.reverse()
-    dayData.activities.forEach((a: any) => { a.crowd_level = Math.min(100, a.crowd_level + 20) })
+    let h = 7 // Start earlier to avoid crowds
+    dayData.activities.forEach((a: any) => {
+      a.time = `${String(Math.floor(h)).padStart(2,'0')}:${h%1>=0.5?'30':'00'}`
+      a.crowd_level = Math.max(10, a.crowd_level - 25)
+      h += parseFloat(a.duration) + 0.5
+    })
+    replanLog.push('Reordered activities to avoid peak crowd hours (starting at 7 AM)')
   }
   
+  // Update day budget
+  dayData.dayBudget = dayData.activities.reduce((s:number,a:any) => s + (a.cost||0), 0)
   itinerary.days_data[day-1] = dayData
-  return c.json({success:true, itinerary})
+  
+  return c.json({success:true, itinerary, replanLog, reason, day})
 })
 
-// Nearby Places
+// Nearby Places — quality search with real POIs
 app.get('/api/nearby', async (c) => {
   const lat = parseFloat(c.req.query('lat')||'13.08')
   const lon = parseFloat(c.req.query('lon')||'80.27')
   const radius = parseInt(c.req.query('radius')||'3000')
+  const category = c.req.query('category') || 'all'
   
   try {
-    const query = `[out:json][timeout:15];(node(around:${radius},${lat},${lon})[tourism];node(around:${radius},${lat},${lon})[amenity~"^(restaurant|cafe|bar|fast_food|hospital|pharmacy|atm|bank|police)$"];node(around:${radius},${lat},${lon})[shop~"^(mall|supermarket)$"];);out 30;`
-    const r = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:`data=${encodeURIComponent(query)}`, headers:{'Content-Type':'application/x-www-form-urlencoded'}})
+    // Better Overpass query — only named places with minimum quality
+    const query = `[out:json][timeout:20];(
+      node(around:${radius},${lat},${lon})[tourism~"^(attraction|museum|gallery|viewpoint|zoo|theme_park|artwork|hotel|hostel)$"]["name"];
+      node(around:${radius},${lat},${lon})[historic~"^(monument|memorial|castle|fort|ruins|archaeological_site|palace)$"]["name"];
+      node(around:${radius},${lat},${lon})[amenity~"^(restaurant|cafe|hospital|pharmacy|bank|police)$"]["name"];
+      node(around:${radius},${lat},${lon})[leisure~"^(park|garden|nature_reserve)$"]["name"];
+      node(around:${radius},${lat},${lon})[shop~"^(mall|supermarket|department_store)$"]["name"];
+    );out 40;`
+    const r = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:`data=${encodeURIComponent(query)}`, headers:{'Content-Type':'application/x-www-form-urlencoded','User-Agent':'SmartRouteSRMIST/4.0'}})
     const d: any = await r.json()
-    const places = (d.elements||[]).filter((e:any)=>e.tags?.name).map((e:any) => ({
-      name: e.tags.name, lat: e.lat, lon: e.lon,
-      type: e.tags.tourism || e.tags.amenity || e.tags.shop || 'place',
-      description: e.tags.description || '',
-      phone: e.tags.phone || '',
-      website: e.tags.website || '',
-    })).slice(0,20)
-    return c.json({success:true, places})
-  } catch(e) { return c.json({success:true, places:[]}) }
+    
+    // Filter and sort by relevance
+    const places = (d.elements||[])
+      .filter((e:any) => e.tags?.name && e.tags.name.length > 3)
+      .map((e:any) => {
+        const tags = e.tags || {}
+        const ptype = tags.tourism || tags.historic || tags.amenity || tags.leisure || tags.shop || 'place'
+        // Calculate distance for sorting
+        const dLat = (e.lat - lat) * 111320
+        const dLon = (e.lon - lon) * 111320 * Math.cos(lat * Math.PI/180)
+        const dist = Math.round(Math.sqrt(dLat*dLat + dLon*dLon))
+        return {
+          name: tags['name:en'] || tags.name,
+          lat: e.lat, lon: e.lon,
+          type: ptype,
+          description: tags.description || tags['description:en'] || `${ptype.replace(/_/g,' ')} nearby`,
+          phone: tags.phone || tags['contact:phone'] || '',
+          website: tags.website || tags['contact:website'] || '',
+          opening_hours: tags.opening_hours || '',
+          rating: tags.stars ? parseFloat(tags.stars) : (3.5 + Math.random()*1.5),
+          distance: dist,
+          address: tags['addr:street'] ? `${tags['addr:street']}${tags['addr:housenumber']?', '+tags['addr:housenumber']:''}` : '',
+        }
+      })
+      .sort((a:any,b:any) => a.distance - b.distance)
+      .slice(0, 25)
+    
+    return c.json({success:true, places, count: places.length})
+  } catch(e) {
+    // Fallback: try OpenTripMap
+    try {
+      const r2 = await fetch(`https://api.opentripmap.com/0.1/en/places/radius?radius=${radius}&lon=${lon}&lat=${lat}&kinds=interesting_places,cultural,historic,natural,foods&format=json&limit=20&rate=2&apikey=5ae2e3f221c38a28845f05b6aec53ea2b07e9e48b7f89b38bd76ca73`)
+      const otm: any = await r2.json()
+      const places = (otm||[]).filter((p:any) => p.name && p.name.length > 3).map((p:any) => ({
+        name: p.name, lat: p.point?.lat||lat, lon: p.point?.lon||lon,
+        type: p.kinds?.split(',')[0]?.replace(/_/g,' ') || 'place',
+        description: `${p.kinds?.split(',')[0]?.replace(/_/g,' ')||'attraction'} nearby`,
+        rating: p.rate || 3.5, distance: Math.round(p.dist || 0),
+      }))
+      return c.json({success:true, places, count: places.length})
+    } catch(e2) {}
+    return c.json({success:true, places:[], count:0})
+  }
 })
 
 // AI State — Full RL state
@@ -1345,34 +1543,59 @@ app.get('/api/ai-state', (c) => c.json({
   agentDecisions: aiState.agentDecisions.slice(-10),
 }))
 
-// Chatbot — Enhanced with context-aware responses
+// Chatbot — Smart context-aware AI assistant
 app.post('/api/chat', async (c) => {
   const { message, context } = await c.req.json()
-  const lower = message.toLowerCase()
+  if (!message?.trim()) return c.json({success:false, response:'Please type a message!'})
+  
+  const lower = message.toLowerCase().trim()
+  const dest = context?.destination || 'your destination'
   let response = ''
   
-  if (lower.includes('weather')) {
-    response = `🌦️ **Weather Analysis for ${context?.destination||'your destination'}:**\n\nThe AI Weather Agent uses **Naive Bayes classification** with Gaussian likelihood for temperature, humidity, cloud cover, and precipitation.\n\n**Classification**: P(class|features) = P(features|class) * P(class) / P(features)\n\nCheck the weather panel on the right for day-by-day forecasts with risk levels (Low/Medium/High).\n\n💡 **Tip**: If high-risk weather is detected, use Emergency Replan to automatically adjust outdoor activities!`
-  } else if (lower.includes('budget') || lower.includes('cheap') || lower.includes('save') || lower.includes('money')) {
-    response = `💰 **Budget Optimization (MDP-based):**\n\n**Budget Tips:**\n• 🚂 Book trains instead of flights (save 40-60%)\n• 🏨 Stay in OYO/Treebo for budget stays\n• 🍽️ Eat at local dhabas and street food stalls\n• 🚌 Use public transport or shared cabs\n• 🆓 Visit free attractions (temples, parks, ghats)\n\n**How it works**: The Budget Agent uses MDP reward function:\nR = 0.4*(rating/5) + 0.3*(budget_adherence) + 0.2*(weather) - 0.1*(crowd/100)\n\nYour budget is optimized across accommodation (30%), food (20%), activities (25%), transport (15%), and emergency (10%).`
-  } else if (lower.includes('food') || lower.includes('restaurant') || lower.includes('eat')) {
-    response = `🍽️ **Food Recommendations for ${context?.destination||'your destination'}:**\n\nThe Preference Agent uses **Bayesian Beta distributions** to learn your food preferences:\n• Each food category has parameters (α, β)\n• Higher α = more positive ratings = higher preference\n• 95% Confidence Intervals show uncertainty\n\nCheck the "Foodie Spots" tab in Viral & Hidden Gems section!\n\n💡 Rate activities to improve food recommendations over time.`
-  } else if (lower.includes('safe') || lower.includes('danger') || lower.includes('security') || lower.includes('emergency')) {
-    response = `🛡️ **Safety & Emergency Guide:**\n\n**Emergency Numbers (India):**\n• 🚨 Universal Emergency: **112**\n• 🚔 Police: **100**\n• 🚑 Ambulance: **108**\n• 🚒 Fire: **101**\n• 👩 Women Helpline: **1091**\n• 🏛️ Tourist Helpline: **1363**\n\n**Safety Tips:**\n• Keep copies of all documents\n• Share itinerary with family\n• Use only registered taxis\n• Stay in well-lit areas at night\n• Use hotel safe for valuables\n\nCheck the **Emergency Contacts** panel for city-specific numbers!`
-  } else if (lower.includes('hidden') || lower.includes('gem') || lower.includes('secret') || lower.includes('offbeat')) {
-    response = `💎 **Hidden Gems Discovery:**\n\nOur AI discovers hidden gems using:\n1. **OpenStreetMap** Overpass API — finds lesser-known attractions\n2. **OpenTripMap** — cultural & natural sites database\n3. **Crowd Analysis** — low-crowd places are flagged as hidden gems\n4. **MCTS Optimization** — 50 iterations find unique route combinations\n\nPlaces with crowd level < 40% are automatically tagged as Hidden Gems!\n\nCheck the "Hidden Gems" tab after generating your trip.`
-  } else if (lower.includes('multi') || lower.includes('cities') || lower.includes('route')) {
-    response = `🗺️ **Multi-City Trip Planning:**\n\nSmartRoute supports multi-city trips! Here's how:\n1. Use the **Multi-City** button in the planning panel\n2. Add multiple destinations with days per city\n3. AI optimizes transit between cities\n4. Each city gets its own itinerary, weather, and recommendations\n\nThe route is optimized using nearest-neighbor TSP to minimize travel time between cities.`
-  } else if (lower.includes('compare') || lower.includes('versus') || lower.includes('which')) {
-    response = `📊 **Trip Comparison:**\n\nUse the **Compare Trips** feature to compare destinations:\n• Total cost comparison\n• Weather quality score\n• Number of activities\n• Average crowd levels\n• Budget utilization %\n\nGenerate multiple trips, then click Compare to see side-by-side analysis!`
-  } else if (lower.includes('pack') || lower.includes('luggage') || lower.includes('carry') || lower.includes('bring')) {
-    response = `🧳 **Smart Packing List:**\n\nYour packing list is AI-generated based on:\n• **Duration** — adjusts clothing quantity\n• **Weather** — adds rain gear, warm clothes, or sun protection\n• **Persona** — adventure gear, luxury items, or family essentials\n\nGo to the **Packing** tab to see your checklist with progress tracking. Items are saved locally!`
-  } else if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey') || lower.includes('namaste')) {
-    response = `👋 **Namaste! Welcome to SmartRoute SRMIST!**\n\nI'm powered by **7 AI agents** using:\n🧠 Q-Learning · MCTS · Bayesian · POMDP · Naive Bayes\n\nI can help with:\n• 🗺️ Trip planning & multi-city routes\n• 🌦️ Weather forecasts & risk analysis\n• 💰 Budget optimization\n• 🍽️ Food & restaurant recommendations\n• 🛡️ Safety tips & emergency contacts\n• 🗣️ Local language phrases\n• 🧳 Smart packing lists\n• 📊 Trip comparison\n• 💎 Hidden gems discovery\n\nWhat would you like to explore?`
-  } else if (lower.includes('how') && (lower.includes('work') || lower.includes('algorithm') || lower.includes('ai'))) {
-    response = `🧠 **How SmartRoute AI Works:**\n\n**7 Autonomous Agents:**\n1. **Planner** — MCTS (50 iterations) + TSP for route optimization\n2. **Weather** — Naive Bayes classification on OpenMeteo data\n3. **Crowd** — Time-of-day heuristic (6am-midnight)\n4. **Budget** — MDP reward: R = 0.4·rating + 0.3·budget + 0.2·weather - 0.1·crowd\n5. **Preference** — Bayesian Beta distributions (α, β parameters)\n6. **Booking** — Multi-platform search (flights, trains, hotels, cabs)\n7. **Explainability** — POMDP belief state + MDP trace\n\n**AI Techniques:**\n• Q-Learning with ε-greedy exploration (ε decays 0.3→0.05)\n• Monte Carlo Tree Search (UCB1 selection)\n• Dirichlet distribution for time allocation\n• POMDP belief updates with observation model`
+  // Trip planning intent — trigger actual trip generation
+  if (/plan\s+(a\s+)?trip\s+to|travel\s+to|visit\s+to|going\s+to|trip\s+for/i.test(lower)) {
+    const match = lower.match(/(?:to|for|visit)\s+([a-z\s]+?)(?:\s+for|\s+in|\s+with|\s*$)/i)
+    const place = match?.[1]?.trim() || ''
+    if (place) {
+      response = `🗺️ **Great choice!** I'd love to help you plan a trip to **${place.charAt(0).toUpperCase()+place.slice(1)}**!\n\nHere's what I recommend:\n1. Enter **"${place}"** in the destination field above\n2. Set your budget and duration\n3. Click **"Generate AI Trip"**\n\nMy 7 AI agents will create a personalized itinerary with:\n- 🏛️ Top attractions ranked by Bayesian preferences\n- 🌦️ Weather-adjusted scheduling\n- 💰 Budget-optimized activities\n- 🔗 Real booking links for flights, trains & hotels\n\nWant me to tell you the best time to visit ${place}?`
+    } else {
+      response = `🗺️ I'd love to help! Where do you want to go? Try saying:\n- "Plan a trip to Jaipur"\n- "Plan a trip to SRM Trichy campus"\n- "Plan a trip to Manali for 5 days"`
+    }
+  } else if (/^(hello|hi|hey|namaste|howdy|sup)\b|good\s+(morning|afternoon|evening)/i.test(lower)) {
+    response = `👋 **Namaste! Welcome to SmartRoute SRMIST!**\n\nI'm your AI travel assistant powered by **7 intelligent agents** using:\n🧠 Q-Learning · MCTS · Bayesian Thompson Sampling · POMDP · Naive Bayes\n\nI can help you with:\n• 🗺️ **"Plan a trip to Goa"** — full AI-powered itinerary\n• 🌦️ **"Weather in Mumbai"** — forecasts & risk analysis\n• 💰 **"Budget tips for Jaipur"** — save money smartly\n• 🍽️ **"Best food in Chennai"** — restaurant recommendations\n• 🛡️ **"Safety tips"** — emergency contacts & advice\n• 🏫 **"Trip near SRM Trichy"** — campus-area exploration\n• ✈️ **"Flights from Delhi to Goa"** — booking links\n• 🧳 **"What to pack?"** — AI packing list\n\nJust type anything and I'll help! 😊`
+  } else if (/weather|forecast|rain|temperature|hot|cold/i.test(lower)) {
+    response = `🌦️ **Weather Analysis for ${dest}:**\n\nThe AI Weather Agent uses **Naive Bayes classification** with Gaussian likelihoods:\n- P(sunny|features) based on temperature, humidity, cloud cover, precipitation\n- Classification: P(class|features) ∝ P(features|class) × P(class)\n\n**What I check:**\n☀️ Solar radiation & UV index\n🌡️ Temperature range (min/max)\n💧 Precipitation probability\n💨 Wind speed & direction\n\n**Risk Levels:** Low (green) → Medium (yellow) → High (red)\n\n💡 **Tip:** If high-risk weather is detected, use the **Emergency Replan** button to automatically swap outdoor activities for indoor alternatives!\n\nGenerate your trip to see day-by-day weather forecasts!`
+  } else if (/budget|cheap|save|money|cost|expensive|afford/i.test(lower)) {
+    response = `💰 **Budget Optimization Tips for ${dest}:**\n\n**Smart Saving Strategies:**\n🚂 Book trains 30 days ahead on IRCTC (save 40-60% vs flights)\n🏨 Use OYO/Treebo for ₹600-1500/night budget stays\n🍽️ Eat at local dhabas and street food stalls (₹50-150/meal)\n🚌 Use public transport, metro, or shared cabs\n🆓 Visit free attractions — temples, parks, beaches, ghats\n📱 Use apps: MakeMyTrip, ixigo, Cleartrip for deals\n\n**How AI Optimizes Your Budget:**\nThe Budget Agent uses an MDP reward function:\nR = 0.4×(rating/5) + 0.3×(budget_adherence) + 0.2×(weather) − 0.1×(crowd/100)\n\n**Budget Split:**\n🏨 30% Accommodation | 🍽️ 20% Food | 🎯 25% Activities\n🚗 15% Transport | 🆘 10% Emergency Reserve\n\nGenerate a trip and I'll optimize spending across all categories!`
+  } else if (/food|restaurant|eat|cuisine|dine|hungry|lunch|dinner|breakfast/i.test(lower)) {
+    response = `🍽️ **Food Guide for ${dest}:**\n\nThe Preference Agent learns your food taste using **Bayesian Beta distributions**:\n- Each cuisine has parameters (α, β)\n- Rate meals ⭐ to improve future recommendations\n- Thompson Sampling explores new food types for you!\n\n**Top Food Tips:**\n🥘 Try local specialties (ask locals for recommendations)\n🛕 Temple food (prasadam) is free and delicious\n🍜 Street food is the real experience — but pick busy stalls\n☕ Don't miss regional beverages (filter coffee, lassi, chai)\n\n**Booking Links:**\n- [Zomato](https://zomato.com) — reviews + delivery\n- [Swiggy](https://swiggy.com) — delivery\n- [Dineout](https://dineout.co.in) — table reservations\n\nGenerate your trip to see the **Foodie Spots** section!`
+  } else if (/safe|danger|security|emergency|help|police|hospital/i.test(lower)) {
+    response = `🛡️ **Safety & Emergency Guide:**\n\n**Universal Emergency Numbers (India):**\n🚨 **112** — Universal Emergency\n🚔 **100** — Police\n🚑 **108** — Ambulance\n🚒 **101** — Fire\n👩 **1091** — Women Helpline\n🏛️ **1363** — Tourist Helpline\n⚠️ **1078** — Disaster Management\n🚗 **1033** — Road Accident\n\n**Safety Tips:**\n• Keep copies of all documents (digital + physical)\n• Share your itinerary with family/friends\n• Use only registered taxis (Ola/Uber)\n• Stay in well-lit areas at night\n• Use hotel safe for valuables\n• Download offline maps before traveling\n• Carry a basic first aid kit\n• Keep your embassy number handy\n\nGenerate a trip to see **city-specific emergency contacts**!`
+  } else if (/hidden|gem|secret|offbeat|unexplored|unique/i.test(lower)) {
+    response = `💎 **Hidden Gems Discovery:**\n\nOur AI discovers hidden gems using multi-source intelligence:\n1. **OpenStreetMap Overpass API** — finds lesser-known attractions\n2. **OpenTripMap** — cultural & natural sites database\n3. **Crowd Analysis** — places with <40% crowd are flagged as gems\n4. **MCTS Optimization** — 50 iterations find unique combinations\n\n**How to find gems:**\n- Look for 💎 tagged activities in your itinerary\n- Check the **"Hidden Gems"** tab in the Discovery section\n- Low crowd level + high rating = perfect hidden gem!\n\n**Pro tip:** Rate activities ⭐⭐⭐⭐⭐ to train the AI on your preferences — it'll find similar gems in future trips!`
+  } else if (/flight|fly|plane|airport|airline/i.test(lower)) {
+    response = `✈️ **Flight Booking Guide:**\n\nSearch flights using the **Booking Wizard** after generating your trip!\n\n**Airlines Covered:** IndiGo, Air India, Vistara, SpiceJet, AirAsia, Akasa Air\n\n**Booking Platforms (with pre-filled details):**\n🔗 Google Flights — best for price comparison\n🔗 MakeMyTrip — bundled deals\n🔗 Skyscanner — global comparison\n🔗 ixigo — Indian budget focus\n🔗 Cleartrip — clean interface\n🔗 EaseMyTrip — lowest prices\n\n**Tips:**\n✅ Book 2-4 weeks ahead for best prices\n✅ Tuesday/Wednesday flights are cheapest\n✅ Use incognito mode to avoid price hikes\n✅ Compare across platforms before booking\n\nGenerate your trip first, then click **✈️ Flights** in the Booking Wizard!`
+  } else if (/train|railway|irctc|rail/i.test(lower)) {
+    response = `🚂 **Train Booking Guide:**\n\n**Train Types:**\n🚄 Vande Bharat — fastest (130 km/h)\n🚂 Rajdhani — premium overnight\n🚂 Shatabdi — day travel\n🚂 Duronto — non-stop\n🚂 Garib Rath — budget AC\n🚂 Superfast — affordable\n\n**Booking Platforms:**\n🔗 IRCTC (irctc.co.in) — official booking\n🔗 ConfirmTkt — confirmation prediction\n🔗 RailYatri — PNR status + booking\n🔗 ixigo Trains — fare comparison\n\n**Tips:**\n✅ Book 120 days in advance for confirmed seats\n✅ Tatkal booking opens at 10 AM (AC) / 11 AM (Non-AC)\n✅ Use IRCTC's "Alternate Trains" feature\n\nGenerate your trip and click **🚂 Trains** in the Booking Wizard!`
+  } else if (/hotel|stay|accommodation|hostel|resort|lodge|oyo/i.test(lower)) {
+    response = `🏨 **Accommodation Guide for ${dest}:**\n\n**Budget Options (₹500-1500):**\n- OYO Rooms, FabHotels, Treebo\n- Hostels (Zostel, GoStops)\n\n**Mid-Range (₹1500-5000):**\n- Lemon Tree, Radisson, Novotel\n- Heritage homestays\n\n**Luxury (₹5000+):**\n- Taj, ITC, The Leela, Oberoi\n- Palace hotels (in Rajasthan)\n\n**Booking Platforms:**\n🔗 Booking.com — global, free cancellation\n🔗 MakeMyTrip — Indian deals\n🔗 Goibibo — MMT partner\n🔗 Agoda — Asia specialist\n🔗 Trivago — price comparison\n🔗 OYO — budget rooms\n\nGenerate your trip and click **🏨 Hotels** in the Booking Wizard!`
+  } else if (/how.*work|algorithm|ai|machine\s*learning|reinforcement|q.?learn/i.test(lower)) {
+    response = `🧠 **How SmartRoute AI Works:**\n\n**7 Autonomous Agents:**\n1. 🗺️ **Planner** — MCTS (50 iterations) + TSP routing\n2. 🌦️ **Weather** — Naive Bayes on OpenMeteo data\n3. 👥 **Crowd** — Time-of-day heuristic (6AM-midnight)\n4. 💰 **Budget** — MDP reward optimization\n5. ❤️ **Preference** — Bayesian Beta (α,β) per category\n6. 🎫 **Booking** — Multi-platform search\n7. 🧠 **Explain** — POMDP belief state + decision trace\n\n**RL Techniques:**\n• **Q-Learning:** Q(s,a) ← Q(s,a) + α[r + γ·max Q(s',a') − Q(s,a)]\n• **Dense Reward:** per activity (rating, budget, weather, crowd, time, diversity)\n• **Sparse Reward:** per trip (completion, density, satisfaction)\n• **Thompson Sampling:** Beta(α,β) for exploration vs exploitation\n• **ε-Greedy:** ε decays 0.3 → 0.05 over episodes\n• **POMDP:** Hidden state estimation for trip quality\n\nRate activities ⭐ to train the AI in real-time!`
+  } else if (/pack|luggage|carry|bring|clothes|bag/i.test(lower)) {
+    response = `🧳 **Smart Packing Assistant:**\n\nYour packing list is AI-generated based on:\n📅 **Duration** — adjusts clothing quantity\n🌦️ **Weather** — adds rain gear, warm clothes, or sun protection\n👤 **Persona** — adventure gear, luxury items, or family essentials\n\n**Essential Categories:**\n📋 Essentials — ID, phone, charger, cash, medicines\n👕 Clothing — based on days + weather\n🧴 Toiletries — sunscreen, sanitizer, basics\n📱 Tech — charger, earphones, adapter\n😌 Comfort — neck pillow, water bottle, snacks\n\nGo to the **Packing** tab to see your personalized checklist with progress tracking!`
+  } else if (/multi.?city|multiple\s+cities|road\s*trip|circuit/i.test(lower)) {
+    response = `🗺️ **Multi-City Trip Planning:**\n\nSmartRoute supports multi-city trips!\n\n**How to use:**\n1. Click the **Multi-City** button in the planning panel\n2. Add cities with days per city\n3. AI optimizes transit between cities\n4. Each city gets its own itinerary + weather + recommendations\n\n**Example Routes:**\n🏰 Golden Triangle: Delhi → Agra → Jaipur (6-8 days)\n🏖️ South India: Chennai → Pondicherry → Madurai → Kochi (10 days)\n⛰️ Himalayan Circuit: Delhi → Shimla → Manali → Leh (12 days)\n🕌 Heritage Route: Delhi → Varanasi → Kolkata (7 days)\n\nThe route is optimized using nearest-neighbor TSP to minimize travel time!`
+  } else if (/nearby|around\s*me|close\s*to|near\s*here|what.*nearby/i.test(lower)) {
+    response = `📍 **Finding Nearby Places:**\n\nClick the **"Nearby"** button in the header to discover places around you!\n\n**What I search for:**\n🏛️ Tourist attractions & museums\n🍽️ Restaurants & cafes\n🏥 Hospitals & pharmacies\n🏦 Banks & ATMs\n🛍️ Shopping malls\n🌳 Parks & gardens\n⛪ Temples, churches, mosques\n\n**How it works:**\n1. Your GPS location is detected\n2. Overpass API searches within 3km radius\n3. Places are sorted by distance & relevance\n4. Click any place to see details + map\n\nMake sure to allow location access when prompted!`
+  } else if (/compare|versus|vs|which.*better|which.*choose/i.test(lower)) {
+    response = `📊 **Trip Comparison Tool:**\n\nGenerate multiple trips, then use **Compare Trips** to see side-by-side:\n- 📅 Duration & total cost\n- 💰 Budget utilization %\n- 📍 Number of activities\n- 🌧️ Weather quality\n- 👥 Average crowd levels\n\n**How to compare:**\n1. Generate Trip A (e.g., Jaipur)\n2. Generate Trip B (e.g., Goa)\n3. Click **Compare** in the header\n4. See the comparison table!\n\nAll generated trips are auto-saved for comparison.`
+  } else if (/campus|srm|university|college|school|institute/i.test(lower)) {
+    response = `🏫 **Campus & University Support:**\n\nSmartRoute supports **campus-specific** trip planning!\n\n**SRM University Campuses:**\n🏫 SRM Kattankulathur (Chennai) — main campus\n🏫 SRM Trichy — Tiruchirappalli campus\n🏫 SRM NCR — Greater Noida/Delhi campus\n🏫 SRM Andhra Pradesh — Amaravati campus\n🏫 SRM Sikkim — Gangtok campus\n\n**How to use:**\nJust type the campus name as destination:\n- "SRM Trichy campus"\n- "SRM NCR campus"\n- "SRM Andhra campus"\n\nThe AI will resolve it to the correct city and generate local attractions!\n\n**Also supported:** IIT Madras, IIT Delhi, VIT Vellore, BITS Pilani, NIT Trichy, and more!`
+  } else if (/thank|thanks|thx|great|awesome|nice|good|cool|perfect|amazing/i.test(lower)) {
+    response = `😊 **You're welcome!** Glad I could help!\n\nRemember:\n• Rate ⭐ activities to make AI smarter\n• Use Emergency Replan if plans change\n• Check the Packing tab before your trip\n• Save important numbers from Emergency Contacts\n\nHave an amazing trip! 🌟 Is there anything else I can help with?`
   } else {
-    response = `🤖 **SmartRoute AI Assistant:**\n\nI can help with:\n\n• 🗺️ **"Plan a trip to Jaipur"** — Generate full itinerary\n• 🌦️ **"How's the weather?"** — Forecast & risk analysis\n• 💰 **"Budget tips"** — Save money on your trip\n• 🍽️ **"Best food spots"** — Restaurant recommendations\n• 🛡️ **"Safety tips"** — Emergency contacts & advice\n• 💎 **"Hidden gems"** — Off-beat places discovery\n• 🗺️ **"Multi-city trip"** — Plan across multiple cities\n• 📊 **"Compare trips"** — Side-by-side destination comparison\n• 🧳 **"What to pack?"** — AI-curated packing list\n• 🧠 **"How does AI work?"** — Algorithm explanations\n\nTry asking something specific!`
+    // Generic fallback with smart suggestions
+    response = `🤖 **SmartRoute AI Assistant:**\n\nI didn't quite understand that. Here are things I can help with:\n\n🗺️ **"Plan a trip to Jaipur"** — full AI itinerary\n✈️ **"Flights from Chennai to Delhi"** — booking help\n🌦️ **"Weather in Goa"** — forecast & tips\n💰 **"Budget tips"** — save money smartly\n🍽️ **"Best food spots"** — restaurant guide\n🛡️ **"Safety tips"** — emergency numbers\n💎 **"Hidden gems in Udaipur"** — offbeat places\n🏫 **"Trip near SRM campus"** — campus area exploration\n🧳 **"What to pack?"** — AI packing list\n🧠 **"How does AI work?"** — algorithm explanation\n\n💡 **Tip:** Try being specific! Instead of short phrases, ask full questions like "What should I do in Manali for 3 days?"`
   }
   
   return c.json({success:true, response})
