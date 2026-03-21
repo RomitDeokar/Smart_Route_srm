@@ -19,7 +19,7 @@
         <div class="logo">
             <div class="logo-icon">🧠</div>
             <span>SmartRoute SRMIST</span>
-            <span class="badge">Agentic AI v3</span>
+            <span class="badge">Agentic AI v4</span>
         </div>
         <nav class="header-nav">
             <button class="nav-tab active" data-view="planner" onclick="switchView('planner')"><i class="fas fa-route"></i> Planner</button>
@@ -287,7 +287,7 @@
         <div class="panel">
             <div class="panel-title"><i class="fas fa-chart-line"></i> RL Reward Progression</div>
             <div class="chart-container"><canvas id="rlChart"></canvas></div>
-            <div class="text-xs text-muted mt-1">R = 0.4(rating) + 0.3(budget) + 0.2(weather) - 0.1(crowd)</div>
+            <div class="text-xs text-muted mt-1">Dense: 0.25·rating + 0.20·budget + 0.15·weather − 0.10·crowd + 0.15·time + 0.15·diversity<br>Sparse: completion + density + budget-fit + weather + variety</div>
         </div>
 
         <!-- Weather -->

@@ -13,8 +13,10 @@ const state = {
   itinerary: null,
   agents: {},
   logs: [],
-  rl: { rewards: [], episode: 0 },
+  // RL state — synced from backend
+  rl: { denseRewards: [], sparseRewards: [], totalRewards: [], cumulativeReward: 0, episode: 0, totalSteps: 0, epsilon: 0.3, alpha: 0.15, gamma: 0.95 },
   bayesian: { cultural:{a:2,b:2}, adventure:{a:2,b:2}, food:{a:3,b:1}, relaxation:{a:1,b:3}, shopping:{a:1,b:2}, nature:{a:2,b:2}, nightlife:{a:1,b:3} },
+  thompsonPrefs: {},
   dirichlet: {},
   pomdpBelief: {},
   budget: { total:15000, used:0, breakdown:{} },
@@ -23,16 +25,18 @@ const state = {
   currentDest: '',
   currentOrigin: '',
   map: null,
+  mapInitialized: false,
   markers: [],
   routeLines: [],
   showRoutes: true,
-  mapLayer: 'light',
+  mapLayer: 'light', // default to light
   bookingCart: { flights:null, trains:null, hotels:null, cabs:null },
   bookingHistory: JSON.parse(localStorage.getItem('sr-history')||'[]'),
   packingList: {},
   packingChecked: JSON.parse(localStorage.getItem('sr-packing')||'{}'),
   atlasTrips: JSON.parse(localStorage.getItem('sr-atlas')||'[]'),
   rlChart: null,
+  rlDenseChart: null,
   budgetChart: null,
   atlasMap: null,
 };
@@ -109,64 +113,120 @@ async function fetchPlacePhoto(name, type, wikiTitle) {
 }
 
 // ============================================
-// INITIALIZATION
+// INITIALIZATION — Map loads IMMEDIATELY
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
+  // 1. Apply theme first
   applyTheme();
+  // 2. Initialize map IMMEDIATELY — this is the critical fix
   initMap();
+  // 3. Force map to render properly after DOM is ready
+  setTimeout(() => {
+    if (state.map) {
+      state.map.invalidateSize();
+      // Ensure tile layer is loaded
+      setMapLayer();
+    }
+  }, 100);
+  // 4. Render UI components
   renderAgentCards();
+  renderBayesian();
+  renderInitialRL();
   checkBackend();
   updateClocks();
   setInterval(updateClocks, 1000);
   document.getElementById('startDate').valueAsDate = new Date();
-  // Load atlas
   updateAtlasStats();
+  // 5. Fetch initial AI state from backend
+  fetchAIState();
 });
 
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', state.theme);
   const icon = document.getElementById('themeIcon');
   if (icon) icon.className = state.theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
-  // Also sync map layer with theme
-  if (state.map && state.mapLayer !== (state.theme === 'dark' ? 'dark' : 'light')) {
-    state.mapLayer = state.theme === 'dark' ? 'dark' : 'light';
+  // Sync map layer with theme
+  const targetLayer = state.theme === 'dark' ? 'dark' : 'light';
+  if (state.map && state.mapLayer !== targetLayer) {
+    state.mapLayer = targetLayer;
     setMapLayer();
   }
 }
 function toggleTheme() {
   state.theme = state.theme === 'dark' ? 'light' : 'dark';
   localStorage.setItem('sr-theme', state.theme);
+  // Update map layer to match theme
+  state.mapLayer = state.theme === 'dark' ? 'dark' : 'light';
   applyTheme();
-  if (state.map) setTimeout(() => state.map.invalidateSize(), 100);
+  if (state.map) {
+    setMapLayer();
+    setTimeout(() => state.map.invalidateSize(), 150);
+  }
+  // Also update atlas map if visible
+  if (state.atlasMap) {
+    try { state.atlasMap.remove(); state.atlasMap = null; } catch(e) {}
+    const atlasEl = document.getElementById('view-atlas');
+    if (atlasEl && atlasEl.style.display !== 'none') setTimeout(() => renderAtlasMap(), 200);
+  }
 }
 
 // ============================================
 // MAP (Leaflet — FREE)
 // ============================================
 function initMap() {
-  state.map = L.map('map', { zoomControl: false }).setView([20.5937, 78.9629], 5);
+  const mapEl = document.getElementById('map');
+  if (!mapEl) { console.error('Map element not found'); return; }
+  
+  // Ensure map container has dimensions
+  mapEl.style.height = '100%';
+  mapEl.style.width = '100%';
+  
+  // Create map
+  state.map = L.map('map', { 
+    zoomControl: false,
+    attributionControl: true,
+  }).setView([20.5937, 78.9629], 5);
+  
   L.control.zoom({ position: 'bottomleft' }).addTo(state.map);
+  
+  // Set the tile layer based on current theme (light by default)
+  state.mapLayer = state.theme === 'dark' ? 'dark' : 'light';
   setMapLayer();
+  state.mapInitialized = true;
+  
+  // Force a resize after a brief delay to ensure tiles load
+  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 200);
+  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 500);
+  console.log('Map initialized with layer:', state.mapLayer);
 }
 function setMapLayer() {
-  if (state.mapTileLayer) state.map.removeLayer(state.mapTileLayer);
+  if (!state.map) return;
+  if (state.mapTileLayer) {
+    try { state.map.removeLayer(state.mapTileLayer); } catch(e) {}
+  }
   const urls = {
     light: 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png',
     street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
   };
-  state.mapTileLayer = L.tileLayer(urls[state.mapLayer] || urls.light, {
-    attribution: '&copy; OpenStreetMap & CartoDB',
-    maxZoom: 19
+  const url = urls[state.mapLayer] || urls.light;
+  state.mapTileLayer = L.tileLayer(url, {
+    attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> & <a href="https://carto.com">CartoDB</a>',
+    maxZoom: 19,
+    subdomains: 'abcd'
   }).addTo(state.map);
+  console.log('Map layer set to:', state.mapLayer);
 }
 function toggleMapLayer() {
-  const layers = ['light','street','satellite','dark'];
+  // Cycle: light → street → satellite → dark → light
+  const layers = state.theme === 'dark' 
+    ? ['dark','street','satellite','light'] 
+    : ['light','street','satellite','dark'];
   const idx = layers.indexOf(state.mapLayer);
   state.mapLayer = layers[(idx+1)%layers.length];
   setMapLayer();
-  showToast(`Map: ${state.mapLayer}`, 'info');
+  showToast(`Map: ${state.mapLayer.charAt(0).toUpperCase() + state.mapLayer.slice(1)}`, 'info');
 }
 function toggleRouteLines() {
   state.showRoutes = !state.showRoutes;
@@ -214,6 +274,49 @@ function getTypeEmoji(type) {
   if (!type) return '📍';
   const t = type.toLowerCase();
   return map[t] || Object.entries(map).find(([k]) => t.includes(k))?.[1] || '📍';
+}
+
+// ============================================
+// FETCH AI STATE FROM BACKEND
+// ============================================
+async function fetchAIState() {
+  try {
+    const r = await fetch(`${API_BASE}/api/ai-state`);
+    const d = await r.json();
+    if (d.bayesian) state.bayesian = d.bayesian;
+    if (d.dirichlet) state.dirichlet = d.dirichlet;
+    if (d.pomdpBelief) state.pomdpBelief = d.pomdpBelief;
+    if (d.thompsonPrefs) state.thompsonPrefs = d.thompsonPrefs;
+    if (d.denseRewards) state.rl.denseRewards = d.denseRewards;
+    if (d.sparseRewards) state.rl.sparseRewards = d.sparseRewards;
+    if (d.totalRewards) state.rl.totalRewards = d.totalRewards;
+    state.rl.cumulativeReward = d.cumulativeReward || 0;
+    state.rl.episode = d.episode || 0;
+    state.rl.totalSteps = d.totalSteps || 0;
+    state.rl.epsilon = d.epsilon || 0.3;
+    renderBayesian();
+    renderDirichlet();
+    renderPOMDP();
+  } catch(e) { console.log('AI state fetch skipped — backend not ready yet'); }
+}
+
+// Render initial RL visualization with placeholder data
+function renderInitialRL() {
+  renderBayesian();
+  // Show Q-Learning formula in explain panel
+  const explainEl = document.getElementById('explainPanel');
+  if (explainEl) {
+    explainEl.innerHTML = `
+      <div class="text-xs" style="line-height:1.6">
+        <strong>Q-Learning:</strong> Q(s,a) ← Q(s,a) + α[r + γ·max Q(s',a') − Q(s,a)]<br>
+        <strong>Dense Reward:</strong> R = 0.25·rating + 0.20·budget + 0.15·weather − 0.10·crowd + 0.15·time + 0.15·diversity<br>
+        <strong>Sparse Reward:</strong> Trip completion + activity density + budget sweet-spot + weather quality<br>
+        <strong>Thompson:</strong> Sample β(α,β) per category for exploration<br>
+        <strong>ε-Greedy:</strong> ε = ${state.rl.epsilon.toFixed(3)} (decays per episode)<br>
+        <em>Generate a trip to see live AI decisions...</em>
+      </div>
+    `;
+  }
 }
 
 // ============================================
@@ -308,18 +411,40 @@ async function generateTrip() {
     state.itinerary = data.itinerary;
     state.budget = { total: budget, used: data.itinerary.totalCost, breakdown: data.itinerary.budgetBreakdown };
 
-    // Update AI state
+    // Update AI/RL state from backend response
     if (data.itinerary.ai) {
-      state.bayesian = data.itinerary.ai.bayesian || state.bayesian;
-      state.dirichlet = data.itinerary.ai.dirichlet || {};
-      state.pomdpBelief = data.itinerary.ai.pomdp_belief || {};
-      state.rl.rewards = data.itinerary.ai.rewards || [];
+      const ai = data.itinerary.ai;
+      state.bayesian = ai.bayesian || state.bayesian;
+      state.dirichlet = ai.dirichlet || {};
+      state.pomdpBelief = ai.pomdp_belief || {};
+      state.thompsonPrefs = ai.thompsonPrefs || {};
+      state.rl.denseRewards = ai.denseRewards || [];
+      state.rl.sparseRewards = ai.sparseRewards || [];
+      state.rl.totalRewards = ai.totalRewards || [];
+      state.rl.cumulativeReward = ai.cumulativeReward || 0;
+      state.rl.epsilon = ai.epsilon || 0.3;
+      state.rl.episode = ai.episode || 0;
+      state.rl.totalSteps = ai.totalSteps || 0;
+      state.rl.alpha = ai.alpha || 0.15;
+      state.rl.gamma = ai.gamma || 0.95;
     }
 
     // Mark all agents completed
     AGENTS.forEach(a => { setAgentStatus(a.id, 'completed'); addLog(a.id, '✅ Task completed'); });
     addConvoMessage('planner', `✅ ${destination} itinerary ready! ${data.itinerary.days_data.length} days, ${data.itinerary.days_data.reduce((s,d)=>s+d.activities.length,0)} activities.`);
-    addConvoMessage('explain', `MDP action selected: <strong>${data.mdpAction}</strong> | Reward: <strong>${data.reward?.toFixed(3)}</strong> | Q-table entries: ${data.itinerary.ai?.q_table_size || 0}`);
+    
+    // Show real RL metrics in agent conversation
+    const ai = data.itinerary.ai || {};
+    addConvoMessage('budget', `💰 Budget optimization complete. Utilization: ${Math.round(data.itinerary.totalCost/budget*100)}%`);
+    addConvoMessage('preference', `🧠 Thompson Sampling preferences: ${Object.entries(state.thompsonPrefs).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`${k}:${(v*100).toFixed(0)}%`).join(', ')}`);
+    addConvoMessage('explain', `📊 Episode #${ai.episode || 1} | ε=${(ai.epsilon||0.3).toFixed(3)} | Q-table: ${ai.q_table_size || 0} entries | Steps: ${ai.totalSteps || 0}`);
+    
+    // Show agent log from backend
+    if (data.itinerary.agentLog) {
+      data.itinerary.agentLog.forEach(log => {
+        addLog(log.agent, log.msg);
+      });
+    }
 
     // Render everything
     renderItinerary(data.itinerary);
@@ -579,36 +704,73 @@ function renderPOMDP() {
 }
 
 // ============================================
-// RL CHART
+// RL CHART — Dense + Sparse Rewards
 // ============================================
 function renderRLChart() {
   const canvas = document.getElementById('rlChart');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const rewards = state.rl.rewards.length ? state.rl.rewards : (state.itinerary?.ai?.rewards || []);
+  
+  const denseR = state.rl.denseRewards || [];
+  const totalR = state.rl.totalRewards || [];
+  const rewards = totalR.length ? totalR : denseR;
   if (!rewards.length) return;
 
   if (state.rlChart) state.rlChart.destroy();
+  
+  const datasets = [{
+    label: 'Total Reward',
+    data: totalR.length ? totalR : rewards,
+    borderColor: '#667eea',
+    backgroundColor: 'rgba(102,126,234,0.1)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 2,
+    borderWidth: 2,
+  }];
+  
+  // Add dense rewards line if available
+  if (denseR.length && totalR.length) {
+    datasets.push({
+      label: 'Dense Reward',
+      data: denseR.slice(-totalR.length),
+      borderColor: '#10b981',
+      backgroundColor: 'rgba(16,185,129,0.05)',
+      fill: false,
+      tension: 0.4,
+      pointRadius: 1,
+      borderWidth: 1.5,
+      borderDash: [4,4],
+    });
+  }
+  
+  // Add sparse rewards if available
+  const sparseR = state.rl.sparseRewards || [];
+  if (sparseR.length) {
+    datasets.push({
+      label: 'Sparse Reward',
+      data: sparseR,
+      borderColor: '#f59e0b',
+      backgroundColor: 'rgba(245,158,11,0.05)',
+      fill: false,
+      tension: 0.4,
+      pointRadius: 3,
+      borderWidth: 2,
+      pointStyle: 'star',
+    });
+  }
+
   state.rlChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: rewards.map((_, i) => `E${i+1}`),
-      datasets: [{
-        label: 'Reward',
-        data: rewards,
-        borderColor: '#667eea',
-        backgroundColor: 'rgba(102,126,234,0.1)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 3,
-        borderWidth: 2,
-      }]
+      labels: rewards.map((_, i) => `S${i+1}`),
+      datasets
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { display: false } } },
-      plugins: { legend: { display: false } }
+      plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 9 }, boxWidth: 12, padding: 6 } } }
     }
   });
 }
@@ -627,16 +789,27 @@ async function rateActivity(actName, rating, category, dest, day) {
     });
     const data = await resp.json();
     if (data.success) {
+      // Update all RL state from backend
       state.bayesian = data.bayesian || state.bayesian;
       state.dirichlet = data.dirichlet || state.dirichlet;
       state.pomdpBelief = data.pomdpBelief || state.pomdpBelief;
-      state.rl.rewards = data.rewards || state.rl.rewards;
+      state.thompsonPrefs = data.thompsonPrefs || state.thompsonPrefs;
+      state.rl.denseRewards = data.denseRewards || state.rl.denseRewards;
+      state.rl.sparseRewards = data.sparseRewards || state.rl.sparseRewards;
+      state.rl.totalRewards = data.totalRewards || state.rl.totalRewards;
+      state.rl.epsilon = data.epsilon || state.rl.epsilon;
+      state.rl.episode = data.episode || state.rl.episode;
+      state.rl.totalSteps = data.totalSteps || state.rl.totalSteps;
+      
+      // Re-render all AI panels
       renderBayesian();
       renderDirichlet();
       renderPOMDP();
       renderRLChart();
-      addLog('preference', `Rated ${actName}: ${'⭐'.repeat(rating)} → Bayesian updated`);
-      showToast(`Rated ${actName}: ${'⭐'.repeat(rating)}`, 'success');
+      renderExplainability({itinerary: state.itinerary, reward: data.reward, tdError: data.tdError});
+      
+      addLog('preference', `Rated ${actName}: ${'⭐'.repeat(rating)} → Bayesian+POMDP+Q updated (reward: ${data.reward?.toFixed(3)}, TD: ${data.tdError?.toFixed(3)})`);
+      showToast(`Rated ${actName}: ${'⭐'.repeat(rating)} — RL updated!`, 'success');
     }
   } catch(e) { console.error('Rating error:', e); }
 }
@@ -728,10 +901,16 @@ function updateAtlasStats() {
 }
 
 function renderAtlasMap() {
-  if (state.atlasMap) { state.atlasMap.remove(); state.atlasMap = null; }
+  if (state.atlasMap) { try { state.atlasMap.remove(); } catch(e) {} state.atlasMap = null; }
+  const atlasEl = document.getElementById('atlasMap');
+  if (!atlasEl) return;
+  
   state.atlasMap = L.map('atlasMap').setView([20, 78], 4);
-  const atlasUrl = state.theme === 'dark' ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png';
-  L.tileLayer(atlasUrl, { attribution: '&copy; OSM & CartoDB', maxZoom: 19 }).addTo(state.atlasMap);
+  // Use same theme as main map
+  const atlasUrl = state.theme === 'dark' 
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
+    : 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png';
+  L.tileLayer(atlasUrl, { attribution: '&copy; OSM & CartoDB', maxZoom: 19, subdomains: 'abcd' }).addTo(state.atlasMap);
 
   state.atlasTrips.forEach(trip => {
     L.circleMarker([trip.lat, trip.lon], {
@@ -744,6 +923,8 @@ function renderAtlasMap() {
     const coords = state.atlasTrips.map(t => [t.lat, t.lon]);
     L.polyline(coords, { color: '#667eea', weight: 2, opacity: 0.5, dashArray: '5,5' }).addTo(state.atlasMap);
   }
+  
+  setTimeout(() => { if (state.atlasMap) state.atlasMap.invalidateSize(); }, 200);
 }
 
 // ============================================
@@ -758,8 +939,10 @@ function switchView(view) {
   if (dashEl) dashEl.style.display = view === 'dashboard' ? 'block' : 'none';
   document.getElementById('bottomPanels').style.display = view === 'planner' ? 'grid' : 'none';
 
-  if (view === 'atlas') { setTimeout(() => renderAtlasMap(), 100); }
-  if (view === 'planner' && state.map) { setTimeout(() => state.map.invalidateSize(), 100); }
+  if (view === 'atlas') { setTimeout(() => renderAtlasMap(), 150); }
+  if (view === 'planner' && state.map) { 
+    setTimeout(() => { state.map.invalidateSize(); setMapLayer(); }, 150); 
+  }
   if (view === 'dashboard') { setTimeout(() => renderDashboard(), 100); }
 }
 
@@ -859,16 +1042,25 @@ function renderInsights(itin) {
 // ============================================
 function renderExplainability(data) {
   const panel = document.getElementById('explainPanel');
-  const ai = data.itinerary?.ai;
-  if (!ai) return;
+  const ai = data?.itinerary?.ai || state.itinerary?.ai;
+  if (!ai && !data?.reward) return;
+  
+  const rl = state.rl;
+  const avgDense = rl.denseRewards.length ? (rl.denseRewards.reduce((s,r) => s+r, 0) / rl.denseRewards.length) : 0;
+  const avgSparse = rl.sparseRewards.length ? (rl.sparseRewards.reduce((s,r) => s+r, 0) / rl.sparseRewards.length) : 0;
+  
   panel.innerHTML = `
-    <div class="text-xs" style="line-height:1.6">
-      <strong>MDP Action:</strong> ${data.mdpAction}<br>
-      <strong>Reward:</strong> R = ${data.reward?.toFixed(4)}<br>
-      <strong>Q-Table Size:</strong> ${ai.q_table_size} entries<br>
-      <strong>ε-Greedy:</strong> ε = ${ai.epsilon?.toFixed(3)}<br>
-      <strong>MCTS:</strong> ${ai.mcts_iterations} iterations<br>
-      <strong>Formula:</strong> R = 0.4·rating + 0.3·budget + 0.2·weather − 0.1·crowd
+    <div class="text-xs" style="line-height:1.8">
+      <strong style="color:var(--primary)">Q-Learning (TD-0):</strong><br>
+      &nbsp;&nbsp;Q(s,a) ← Q(s,a) + α[r + γ·maxQ(s',a') − Q(s,a)]<br>
+      &nbsp;&nbsp;α = ${(ai?.alpha || rl.alpha).toFixed(2)} | γ = ${(ai?.gamma || rl.gamma).toFixed(2)} | ε = ${(ai?.epsilon || rl.epsilon).toFixed(3)}<br>
+      <strong style="color:var(--success)">Dense Reward:</strong> avg = ${avgDense.toFixed(4)} (${rl.denseRewards.length} steps)<br>
+      <strong style="color:var(--warning)">Sparse Reward:</strong> avg = ${avgSparse.toFixed(4)} (${rl.sparseRewards.length} episodes)<br>
+      <strong style="color:var(--accent)">Cumulative:</strong> ${rl.cumulativeReward.toFixed(3)}<br>
+      <strong>Q-Table:</strong> ${ai?.q_table_size || '?'} entries | Episode: #${ai?.episode || rl.episode}<br>
+      <strong>MCTS:</strong> ${ai?.mcts_iterations || 50} iterations<br>
+      ${data?.tdError !== undefined ? `<strong>Last TD Error:</strong> ${data.tdError.toFixed(4)}<br>` : ''}
+      ${data?.reward !== undefined ? `<strong>Last Reward:</strong> ${data.reward.toFixed(4)}` : ''}
     </div>
   `;
 }
@@ -1704,14 +1896,17 @@ function deleteJournalEntry(id) {
 function renderDashboard() {
   const trips = state.savedTrips || [];
   const history = state.bookingHistory || [];
-  const rewards = state.rl.rewards || [];
+  const rl = state.rl;
+  const denseR = rl.denseRewards || [];
+  const totalR = rl.totalRewards || [];
   
   document.getElementById('dashTrips').textContent = trips.length;
   document.getElementById('dashBudget').textContent = `₹${trips.reduce((s,t) => s + (t.budget||0), 0).toLocaleString()}`;
   document.getElementById('dashPlaces').textContent = trips.reduce((s,t) => s + (t.days_data?.reduce((s2,d) => s2 + d.activities.length, 0)||0), 0);
-  document.getElementById('dashAIActions').textContent = Object.keys(aiState?.qTable||state.rl?.rewards||{}).length || rewards.length;
+  document.getElementById('dashAIActions').textContent = rl.totalSteps || denseR.length;
   document.getElementById('dashRatings').textContent = Object.values(state.bayesian).reduce((s,b) => s + (b.a||0) + (b.b||0), 0) - 14; // minus initial values
-  document.getElementById('dashAvgReward').textContent = rewards.length ? (rewards.reduce((s,r) => s+r, 0) / rewards.length).toFixed(3) : '0';
+  const avgReward = totalR.length ? (totalR.reduce((s,r) => s+r, 0) / totalR.length) : (denseR.length ? (denseR.reduce((s,r) => s+r, 0) / denseR.length) : 0);
+  document.getElementById('dashAvgReward').textContent = avgReward.toFixed(3);
   
   // Render dashboard charts
   renderDashboardCharts();
@@ -1730,13 +1925,24 @@ function renderDashboard() {
 function renderDashboardCharts() {
   // RL Chart
   const rlCanvas = document.getElementById('dashRLChart');
-  if (rlCanvas && state.rl.rewards?.length) {
+  const rl = state.rl;
+  const totalR = rl.totalRewards || [];
+  const denseR = rl.denseRewards || [];
+  const rewards = totalR.length ? totalR : denseR;
+  
+  if (rlCanvas && rewards.length) {
     const ctx = rlCanvas.getContext('2d');
     if (state._dashRLChart) state._dashRLChart.destroy();
+    
+    const datasets = [{label:'Total Reward',data:rewards,borderColor:'#667eea',backgroundColor:'rgba(102,126,234,0.1)',fill:true,tension:0.4}];
+    if (denseR.length && totalR.length) {
+      datasets.push({label:'Dense',data:denseR.slice(-rewards.length),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.05)',fill:false,tension:0.4,borderDash:[4,4]});
+    }
+    
     state._dashRLChart = new Chart(ctx, {
       type: 'line',
-      data: { labels: state.rl.rewards.map((_,i) => `E${i+1}`), datasets: [{label:'Reward',data:state.rl.rewards,borderColor:'#667eea',backgroundColor:'rgba(102,126,234,0.1)',fill:true,tension:0.4}] },
-      options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+      data: { labels: rewards.map((_,i) => `S${i+1}`), datasets },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true,position:'bottom',labels:{font:{size:9}}}} }
     });
   }
   
@@ -1779,5 +1985,4 @@ function _addTripToSaved(itin) {
 // Enhanced DOMContentLoaded
 document.addEventListener('DOMContentLoaded', () => {
   renderJournalEntries();
-  setTimeout(() => { if (typeof renderBayesian === 'function') renderBayesian(); }, 200);
 });

@@ -5,56 +5,262 @@ const app = new Hono()
 app.use('/api/*', cors())
 
 // ============================================
-// AI ENGINE (Edge-compatible, no Node.js deps)
+// AI ENGINE — Real Reinforcement Learning System
+// Q-Learning, Bayesian Thompson Sampling, POMDP,
+// Dense + Sparse Rewards, Agentic AI Pipeline
 // ============================================
 
-// Q-Table & preferences stored in-memory (per-worker lifecycle)
+// AI State: Full RL state persisted in-memory per worker
 const aiState: any = {
-  qTable: {},
-  bayesian: { cultural:{a:2,b:2}, adventure:{a:2,b:2}, food:{a:3,b:1}, relaxation:{a:1,b:3}, shopping:{a:1,b:2}, nature:{a:2,b:2}, nightlife:{a:1,b:3} },
-  dirichlet: { cultural:2, adventure:2, food:3, relaxation:1, shopping:1, nature:2, nightlife:1 },
-  pomdpBelief: { excellent:0.25, good:0.35, average:0.25, poor:0.15 },
-  rewards: [],
-  epsilon: 0.3,
+  // Q-Learning table: state → {action → Q-value}
+  qTable: {} as Record<string, Record<string, number>>,
+  // Hyperparameters
+  alpha: 0.15,        // Learning rate
+  gamma: 0.95,        // Discount factor for future rewards
+  epsilon: 0.3,       // Exploration rate (decays)
+  epsilonDecay: 0.992, // Decay rate per episode
+  epsilonMin: 0.05,   // Minimum exploration
+
+  // Bayesian Thompson Sampling — Beta(a,b) per category
+  bayesian: { 
+    cultural:{a:2,b:2}, adventure:{a:2,b:2}, food:{a:3,b:1}, 
+    relaxation:{a:1,b:3}, shopping:{a:1,b:2}, nature:{a:2,b:2}, nightlife:{a:1,b:3},
+    historical:{a:2,b:1}, beach:{a:2,b:2}, spiritual:{a:1,b:2}
+  } as Record<string, {a:number,b:number}>,
+
+  // Dirichlet distribution for time allocation
+  dirichlet: { cultural:2, adventure:2, food:3, relaxation:1, shopping:1, nature:2, nightlife:1, historical:2, beach:2, spiritual:1 } as Record<string, number>,
+
+  // POMDP belief state: hidden trip quality → probability
+  pomdpBelief: { excellent:0.25, good:0.35, average:0.25, poor:0.15 } as Record<string, number>,
+
+  // Reward tracking: dense (per-step) + sparse (episode-end)
+  denseRewards: [] as number[],    // Immediate rewards per activity
+  sparseRewards: [] as number[],   // End-of-episode (trip) rewards
+  totalRewards: [] as number[],    // Combined rewards
+  cumulativeReward: 0,
+  
+  // Episode tracking
+  episode: 0,
+  totalSteps: 0,
+
+  // Agent orchestration log
+  agentDecisions: [] as any[],
 }
 
-const ACTIONS = ['keep_plan','swap_activity','reorder_destinations','adjust_budget','add_contingency','remove_activity']
+// Actions available to the RL agent
+const ACTIONS = ['keep_plan','swap_activity','reorder_destinations','adjust_budget','add_contingency','remove_activity','explore_new','optimize_time']
 
-function qSelect(stateKey: string): string {
-  if (Math.random() < aiState.epsilon) return ACTIONS[Math.floor(Math.random()*ACTIONS.length)]
+// ============================================
+// Q-LEARNING IMPLEMENTATION
+// ============================================
+
+// Thompson Sampling for action selection (Bayesian exploration)
+function thompsonSelect(stateKey: string): string {
   const row = aiState.qTable[stateKey] || {}
-  let best = ACTIONS[0], bestVal = -Infinity
-  for (const a of ACTIONS) { if ((row[a]||0) > bestVal) { bestVal = row[a]||0; best = a } }
-  return best
+  // Sample from posterior for each action
+  let bestAction = ACTIONS[0], bestSample = -Infinity
+  for (const action of ACTIONS) {
+    const q = row[action] || 0
+    const visits = row[`${action}_n`] || 1
+    // Use Gaussian posterior: mean=Q, variance=1/sqrt(visits)
+    const sample = q + (Math.sqrt(2/visits)) * gaussianRandom()
+    if (sample > bestSample) { bestSample = sample; bestAction = action }
+  }
+  return bestAction
 }
 
-function qUpdate(stateKey: string, action: string, reward: number) {
+function gaussianRandom(): number {
+  // Box-Muller transform
+  const u1 = Math.random(); const u2 = Math.random()
+  return Math.sqrt(-2 * Math.log(u1 || 0.0001)) * Math.cos(2 * Math.PI * u2)
+}
+
+// Epsilon-greedy with Thompson Sampling hybrid
+function qSelect(stateKey: string): string {
+  // Pure exploration
+  if (Math.random() < aiState.epsilon) {
+    return ACTIONS[Math.floor(Math.random() * ACTIONS.length)]
+  }
+  // Thompson Sampling for exploitation (better than pure greedy)
+  return thompsonSelect(stateKey)
+}
+
+// Q-Learning update with TD(0) error
+function qUpdate(stateKey: string, action: string, reward: number, nextStateKey?: string) {
   if (!aiState.qTable[stateKey]) aiState.qTable[stateKey] = {}
-  const old = aiState.qTable[stateKey][action] || 0
-  aiState.qTable[stateKey][action] = old + 0.1 * (reward - old)
-  aiState.rewards.push(reward)
-  aiState.epsilon = Math.max(0.05, aiState.epsilon * 0.995)
+  
+  const oldQ = aiState.qTable[stateKey][action] || 0
+  
+  // Find max Q for next state (for Q-learning off-policy update)
+  let maxNextQ = 0
+  if (nextStateKey && aiState.qTable[nextStateKey]) {
+    const nextRow = aiState.qTable[nextStateKey]
+    for (const a of ACTIONS) { maxNextQ = Math.max(maxNextQ, nextRow[a] || 0) }
+  }
+  
+  // TD(0) update: Q(s,a) ← Q(s,a) + α[r + γ·max Q(s',a') - Q(s,a)]
+  const tdError = reward + aiState.gamma * maxNextQ - oldQ
+  const newQ = oldQ + aiState.alpha * tdError
+  aiState.qTable[stateKey][action] = newQ
+  
+  // Track visit count for Thompson Sampling
+  aiState.qTable[stateKey][`${action}_n`] = (aiState.qTable[stateKey][`${action}_n`] || 0) + 1
+  
+  // Decay epsilon
+  aiState.epsilon = Math.max(aiState.epsilonMin, aiState.epsilon * aiState.epsilonDecay)
+  aiState.totalSteps++
+  
+  return { tdError, newQ, oldQ }
 }
 
-function computeReward(rating: number, budgetAdherence: number, weatherProb: number, crowd: number): number {
-  return 0.4*rating/5 + 0.3*budgetAdherence + 0.2*weatherProb - 0.1*(crowd/100)
+// ============================================
+// DENSE + SPARSE REWARD SYSTEM
+// ============================================
+
+// Dense reward: computed per activity/step (immediate feedback)
+function computeDenseReward(params: {
+  rating: number,          // 0-5
+  budgetAdherence: number, // 0-1 (how well within budget)
+  weatherSafety: number,   // 0-1 probability of good weather
+  crowdLevel: number,      // 0-100
+  timeEfficiency: number,  // 0-1 (how well time is used)
+  diversityBonus: number,  // 0-1 (variety of activity types)
+}): number {
+  const { rating, budgetAdherence, weatherSafety, crowdLevel, timeEfficiency, diversityBonus } = params
+  // Multi-factor dense reward
+  const ratingReward = 0.25 * (rating / 5)
+  const budgetReward = 0.20 * budgetAdherence
+  const weatherReward = 0.15 * weatherSafety
+  const crowdPenalty = -0.10 * (crowdLevel / 100)
+  const timeReward = 0.15 * timeEfficiency
+  const diversityReward = 0.15 * diversityBonus
+  
+  const dense = ratingReward + budgetReward + weatherReward + crowdPenalty + timeReward + diversityReward
+  aiState.denseRewards.push(dense)
+  return dense
 }
+
+// Sparse reward: computed at end of episode (trip completion)
+function computeSparseReward(params: {
+  tripCompleted: boolean,
+  totalActivities: number,
+  budgetUtilization: number, // 0-1
+  weatherDaysGood: number,   // count of good weather days
+  totalDays: number,
+  avgRating: number,
+  uniqueTypes: number,
+  userSatisfaction: number,  // 0-5
+}): number {
+  const { tripCompleted, totalActivities, budgetUtilization, weatherDaysGood, totalDays, avgRating, uniqueTypes, userSatisfaction } = params
+  
+  let sparse = 0
+  // Completion bonus
+  if (tripCompleted) sparse += 1.0
+  // Activity density: reward for having enough activities
+  sparse += 0.3 * Math.min(1, totalActivities / (totalDays * 4))
+  // Budget sweet spot: 70-90% utilization is ideal
+  const budgetScore = 1 - Math.abs(budgetUtilization - 0.8) * 3
+  sparse += 0.25 * Math.max(0, budgetScore)
+  // Weather quality
+  sparse += 0.2 * (weatherDaysGood / Math.max(totalDays, 1))
+  // Rating quality
+  sparse += 0.3 * (avgRating / 5)
+  // Diversity bonus
+  sparse += 0.15 * Math.min(1, uniqueTypes / 5)
+  // Satisfaction (if rated)
+  if (userSatisfaction > 0) sparse += 0.3 * (userSatisfaction / 5)
+  
+  aiState.sparseRewards.push(sparse)
+  return sparse
+}
+
+// Combined reward for Q-learning
+function computeTotalReward(dense: number, sparse: number): number {
+  // Weight dense vs sparse: dense for immediate, sparse for long-term
+  const total = 0.6 * dense + 0.4 * sparse
+  aiState.totalRewards.push(total)
+  aiState.cumulativeReward += total
+  return total
+}
+
+// ============================================
+// BAYESIAN THOMPSON SAMPLING
+// ============================================
 
 function bayesianUpdate(category: string, rating: number) {
   const b = aiState.bayesian[category]
-  if (!b) return
-  if (rating >= 4) b.a += 1; else b.b += 1
-  // Dirichlet
-  if (aiState.dirichlet[category] !== undefined) aiState.dirichlet[category] += rating/5
+  if (!b) { aiState.bayesian[category] = {a:1,b:1} }
+  const beta = aiState.bayesian[category]
+  
+  // Update Beta distribution: success (rating >= 3.5) or failure
+  if (rating >= 3.5) {
+    beta.a += 1 + (rating - 3.5) / 1.5  // Scale success magnitude
+  } else {
+    beta.b += 1 + (3.5 - rating) / 3.5
+  }
+  
+  // Dirichlet update: accumulate evidence
+  if (aiState.dirichlet[category] !== undefined) {
+    aiState.dirichlet[category] += Math.max(0.1, rating / 5)
+  } else {
+    aiState.dirichlet[category] = 1 + rating / 5
+  }
 }
 
+// Sample from Beta distribution for Thompson Sampling
+function betaSample(a: number, b: number): number {
+  // Approximate Beta sampling using Gamma distributions
+  const ga = gammaSample(a)
+  const gb = gammaSample(b)
+  return ga / (ga + gb + 0.0001)
+}
+
+function gammaSample(shape: number): number {
+  if (shape < 1) {
+    return gammaSample(shape + 1) * Math.pow(Math.random(), 1 / shape)
+  }
+  const d = shape - 1/3; const c = 1/Math.sqrt(9*d)
+  while(true) {
+    let x = gaussianRandom(); let v = Math.pow(1 + c*x, 3)
+    if (v > 0 && Math.log(Math.random()) < 0.5*x*x + d - d*v + d*Math.log(v)) return d*v
+  }
+}
+
+// Get personalized category preferences via Thompson Sampling
+function getThompsonPreferences(): Record<string, number> {
+  const prefs: Record<string, number> = {}
+  for (const [cat, {a, b}] of Object.entries(aiState.bayesian)) {
+    prefs[cat] = betaSample(a, b)
+  }
+  return prefs
+}
+
+// ============================================
+// POMDP BELIEF UPDATE
+// ============================================
+
 function pomdpUpdate(observation: string) {
-  const obs: any = { high: {excellent:0.6,good:0.3,average:0.08,poor:0.02}, mid: {excellent:0.15,good:0.45,average:0.3,poor:0.1}, low: {excellent:0.02,good:0.1,average:0.38,poor:0.5} }
-  const likelihoods = obs[observation] || obs.mid
+  const obsModels: Record<string, Record<string, number>> = {
+    high_rating:   {excellent:0.6, good:0.3, average:0.08, poor:0.02},
+    good_weather:  {excellent:0.4, good:0.4, average:0.15, poor:0.05},
+    low_crowd:     {excellent:0.5, good:0.3, average:0.15, poor:0.05},
+    on_budget:     {excellent:0.35,good:0.4, average:0.2,  poor:0.05},
+    mid:           {excellent:0.15,good:0.45,average:0.3,  poor:0.1},
+    low_rating:    {excellent:0.02,good:0.1, average:0.38, poor:0.5},
+    bad_weather:   {excellent:0.05,good:0.1, average:0.35, poor:0.5},
+    high_crowd:    {excellent:0.05,good:0.15,average:0.4,  poor:0.4},
+    over_budget:   {excellent:0.05,good:0.15,average:0.35, poor:0.45},
+  }
+  const likelihoods = obsModels[observation] || obsModels.mid
   const b = aiState.pomdpBelief
   let total = 0
-  for (const s of Object.keys(b)) { b[s] *= (likelihoods[s]||0.25); total += b[s] }
+  for (const s of Object.keys(b)) { b[s] *= (likelihoods[s] || 0.25); total += b[s] }
   if (total > 0) for (const s of Object.keys(b)) b[s] /= total
+  // Prevent degenerate beliefs
+  for (const s of Object.keys(b)) { b[s] = Math.max(0.01, b[s]) }
+  let sum = Object.values(b).reduce((s: number, v: any) => s + (v as number), 0) as number
+  for (const s of Object.keys(b)) b[s] /= sum
 }
 
 function crowdHeuristic(hour: number): number {
@@ -390,10 +596,38 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
   const itinDays: any[] = []
   let usedNames = new Set<string>()
   let totalCost = 0
+  const agentLog: any[] = []
+
+  // Agent 1: Planner Agent — MCTS + Thompson Sampling
+  agentLog.push({agent:'planner', action:'initialize', msg:`Starting MCTS optimization for ${city}, ${days} days, budget ₹${budget}`})
+
+  // Get personalized preferences via Thompson Sampling
+  const preferences = getThompsonPreferences()
+  agentLog.push({agent:'preference', action:'thompson_sample', msg:`Sampled preferences: ${Object.entries(preferences).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`${k}:${(v*100).toFixed(0)}%`).join(', ')}`})
+
+  // Track all dense rewards for this episode
+  const episodeDenseRewards: number[] = []
+  const usedTypes = new Set<string>()
 
   for (let d = 0; d < days; d++) {
-    const dayPlaces = places.filter(p => !usedNames.has(p.name)).slice(0, perDay)
+    // Agent 2: Weather Agent — classify each day
+    const w = weather[d] || {}
+    const weatherSafe = (w.risk_level || 'low') !== 'high'
+    
+    // Select appropriate places, weighted by Thompson preferences
+    let dayPlaces = places.filter(p => !usedNames.has(p.name))
+    
+    // Score and sort places using Bayesian preferences
+    dayPlaces = dayPlaces.map(p => {
+      const catPref = preferences[p.type] || preferences['cultural'] || 0.5
+      const baseScore = catPref * 0.4 + (p.rating || 4) / 5 * 0.3 + Math.random() * 0.3
+      return {...p, _score: baseScore}
+    }).sort((a: any, b: any) => (b._score || 0) - (a._score || 0)).slice(0, perDay)
+    
     dayPlaces.forEach(p => usedNames.add(p.name))
+    
+    // Agent 3: Crowd Analyzer — predict crowd per time slot
+    agentLog.push({agent:'crowd', action:'predict', msg:`Day ${d+1}: Crowd predictions generated for ${dayPlaces.length} time slots`})
     
     // MCTS optimize order
     const optimized = mctsOptimize(dayPlaces, weather, dailyBudget)
@@ -404,18 +638,44 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
       const duration = place.type === 'museum' ? 2 : place.type === 'park' ? 1.5 : place.type === 'beach' ? 2.5 : 1.5
       const cost = persona === 'luxury' ? Math.round(300 + Math.random()*500) : persona === 'adventure' ? Math.round(100 + Math.random()*300) : Math.round(50 + Math.random()*200)
       const crowd = crowdHeuristic(startHour)
-      const w = weather[d] || {}
-      const weatherSafe = (w.risk_level || 'low') !== 'high'
+      const actWeatherSafe = weatherSafe
+      
+      usedTypes.add(place.type || 'attraction')
+      
+      // Compute dense reward for this activity
+      const denseR = computeDenseReward({
+        rating: place.rating || 4,
+        budgetAdherence: Math.max(0, 1 - Math.abs(cost - dailyBudget/perDay) / (dailyBudget/perDay)),
+        weatherSafety: actWeatherSafe ? 0.9 : 0.3,
+        crowdLevel: crowd,
+        timeEfficiency: Math.min(1, duration / 2),
+        diversityBonus: usedTypes.size / 5,
+      })
+      episodeDenseRewards.push(denseR)
+      
+      // Q-Learning: select action for this state, then update
+      const stateKey = `${city}|d${d+1}|${place.type}|crowd${Math.round(crowd/20)*20}`
+      const nextStateKey = `${city}|d${d+1}|next`
+      const action = qSelect(stateKey)
+      const qlResult = qUpdate(stateKey, action, denseR, nextStateKey)
+      
+      // POMDP update based on activity conditions
+      if (crowd < 30) pomdpUpdate('low_crowd')
+      else if (crowd > 70) pomdpUpdate('high_crowd')
+      if (actWeatherSafe) pomdpUpdate('good_weather')
+      else pomdpUpdate('bad_weather')
       
       activities.push({
         name: place.name, lat: place.lat, lon: place.lon, type: place.type,
         description: place.description, time: `${String(Math.floor(startHour)).padStart(2,'0')}:${startHour%1?'30':'00'}`,
         duration: `${duration}h`, cost, crowd_level: crowd,
-        weather_safe: weatherSafe, weather_warning: !weatherSafe ? `⚠️ ${w.icon} Weather risk` : '',
+        weather_safe: actWeatherSafe, weather_warning: !actWeatherSafe ? `⚠️ ${w.icon} Weather risk` : '',
         wikiTitle: place.wikiTitle || place.name, opening_hours: place.opening_hours || '',
         phone: place.phone || '', website: place.website || '', wheelchair: place.wheelchair || '',
         rating: place.rating || (3.5 + Math.random()*1.5),
-        notes: '', // User can add notes per activity
+        notes: '',
+        // RL metadata
+        rl: { action, denseReward: denseR, tdError: qlResult.tdError, qValue: qlResult.newQ }
       })
       totalCost += cost
       startHour += duration + 0.5
@@ -426,7 +686,7 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
       weather: weather[d] || {icon:'☀️',temp_max:30,temp_min:22,risk_level:'low'},
       activities,
       dayBudget: Math.round(activities.reduce((s,a) => s+a.cost, 0)),
-      dayNotes: '', // User day notes
+      dayNotes: '',
     })
   }
 
@@ -437,17 +697,59 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
   const activityBudget = Math.round(budget * 0.25)
   const emergency = Math.round(budget * 0.1)
 
+  // Compute sparse reward for the complete trip
+  const totalActivities = itinDays.reduce((s: number,d: any) => s + d.activities.length, 0)
+  const avgRating = itinDays.flatMap((d: any) => d.activities).reduce((s: number,a: any) => s + (a.rating||4), 0) / Math.max(totalActivities, 1)
+  const goodWeatherDays = weather.filter((w: any) => w.risk_level !== 'high').length
+  const budgetUtil = (totalCost + accommodation + food) / budget
+  
+  const sparseR = computeSparseReward({
+    tripCompleted: true,
+    totalActivities,
+    budgetUtilization: budgetUtil,
+    weatherDaysGood: goodWeatherDays,
+    totalDays: days,
+    avgRating,
+    uniqueTypes: usedTypes.size,
+    userSatisfaction: 0, // Will be updated when user rates
+  })
+  
+  // Combined reward
+  const avgDense = episodeDenseRewards.length ? episodeDenseRewards.reduce((s,r) => s+r, 0) / episodeDenseRewards.length : 0
+  const totalReward = computeTotalReward(avgDense, sparseR)
+  
+  aiState.episode++
+  agentLog.push({agent:'explain', action:'episode_complete', msg:`Episode ${aiState.episode}: dense=${avgDense.toFixed(3)}, sparse=${sparseR.toFixed(3)}, total=${totalReward.toFixed(3)}, ε=${aiState.epsilon.toFixed(3)}`})
+
+  // Store agent decisions
+  aiState.agentDecisions.push({
+    episode: aiState.episode, city, days, persona, totalReward,
+    actions: itinDays.flatMap((d: any) => d.activities.map((a: any) => a.rl?.action)).filter(Boolean)
+  })
+
   return {
     destination: city, origin, days, budget, persona,
     totalCost: totalCost + accommodation + food,
     originCoords, destCoords: {lat: places[0]?.lat, lon: places[0]?.lon},
     budgetBreakdown: { accommodation, food, activities: activityBudget, transport, emergency },
     days_data: itinDays, weather,
+    agentLog,
     ai: {
-      mcts_iterations: 50, q_table_size: Object.keys(aiState.qTable).length,
-      bayesian: aiState.bayesian, dirichlet: aiState.dirichlet,
-      pomdp_belief: aiState.pomdpBelief, rewards: aiState.rewards.slice(-20),
+      mcts_iterations: 50, 
+      q_table_size: Object.keys(aiState.qTable).length,
+      bayesian: aiState.bayesian, 
+      dirichlet: aiState.dirichlet,
+      pomdp_belief: aiState.pomdpBelief, 
+      denseRewards: aiState.denseRewards.slice(-30),
+      sparseRewards: aiState.sparseRewards.slice(-20),
+      totalRewards: aiState.totalRewards.slice(-30),
+      cumulativeReward: aiState.cumulativeReward,
       epsilon: aiState.epsilon,
+      episode: aiState.episode,
+      totalSteps: aiState.totalSteps,
+      alpha: aiState.alpha,
+      gamma: aiState.gamma,
+      thompsonPrefs: getThompsonPreferences(),
     }
   }
 }
@@ -553,9 +855,12 @@ function generateFlights(origin: string, dest: string, date: string): any[] {
       bookingUrl: searchUrl,
       rating: airline.rating.toFixed(1),
       bookingPlatforms: [
-        {name:'Google Flights', url: searchUrl},
+        {name:'Google Flights', url: searchUrl, icon:'google'},
         {name:'MakeMyTrip', url: `https://www.makemytrip.com/flight/search?fromCity=${encodeURIComponent(origin)}&toCity=${encodeURIComponent(dest)}`},
         {name:'Skyscanner', url: `https://www.skyscanner.co.in/transport/flights/${encodeURIComponent(origin)}/${encodeURIComponent(dest)}/`},
+        {name:'ixigo', url: `https://www.ixigo.com/search/result/flight?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
+        {name:'Cleartrip', url: `https://www.cleartrip.com/flights/results?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
+        {name:'EaseMyTrip', url: `https://flight.easemytrip.com/FlightList/Index?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
       ]
     }
   }).sort((a,b) => a.price - b.price)
@@ -596,6 +901,9 @@ function generateTrains(origin: string, dest: string): any[] {
         {name:'IRCTC', url: irctcUrl},
         {name:'ConfirmTkt', url: confirmtktUrl},
         {name:'RailYatri', url: `https://www.railyatri.in/booking/search?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(dest)}`},
+        {name:'ixigo Trains', url: `https://www.ixigo.com/search/result/train/${encodeURIComponent(origin)}/${encodeURIComponent(dest)}/`},
+        {name:'MakeMyTrip Trains', url: `https://www.makemytrip.com/railways/`},
+        {name:'Cleartrip Trains', url: `https://www.cleartrip.com/trains`},
       ]
     }
   }).sort((a,b) => a.price - b.price)
@@ -635,6 +943,9 @@ function generateHotels(city: string, days: number, persona: string): any[] {
         {name:'Booking.com', url: searchUrl},
         {name:'MakeMyTrip', url: `https://www.makemytrip.com/hotels/hotel-listing?city=${encodeURIComponent(city)}`},
         {name:'Goibibo', url: `https://www.goibibo.com/hotels/hotels-in-${city.toLowerCase().replace(/\s+/g,'-')}/`},
+        {name:'Agoda', url: `https://www.agoda.com/search?city=${encodeURIComponent(city)}`},
+        {name:'Trivago', url: `https://www.trivago.in/en-IN/srl?search=${encodeURIComponent(city)}`},
+        {name:'OYO', url: `https://www.oyorooms.com/search?location=${encodeURIComponent(city)}`},
       ],
       image: '', currency: '₹',
     }
@@ -835,7 +1146,7 @@ function compareTrips(trips: any[]): any {
 // ============================================
 
 // Health check
-app.get('/api/health', (c) => c.json({status:'ok',agents:7,version:'3.0',engine:'SmartRoute SRMIST Agentic AI',features:['mcts','q-learning','bayesian','pomdp','naive-bayes','multi-city','packing','atlas','journal','comparison','emergency-contacts','safety-tips','currency','collab']}))
+app.get('/api/health', (c) => c.json({status:'ok',agents:7,version:'4.0',engine:'SmartRoute SRMIST Agentic AI + RL',features:['mcts','q-learning','bayesian-thompson','pomdp','naive-bayes','dense-sparse-rewards','multi-city','packing','atlas','journal','comparison','emergency-contacts','safety-tips','currency','collab']}))
 
 // Generate Trip
 app.post('/api/generate-trip', async (c) => {
@@ -866,18 +1177,10 @@ app.post('/api/generate-trip', async (c) => {
   const emergencyContacts = getEmergencyContacts(destination)
   const safetyTips = getSafetyTips(destination, persona)
   
-  // Update AI state
-  const stateKey = `${destination}|${duration}|${persona}`
-  const action = qSelect(stateKey)
-  const reward = computeReward(4, 0.8, weather.length ? weather.filter(w=>w.risk_level!=='high').length/weather.length : 0.7, 50)
-  qUpdate(stateKey, action, reward)
-  pomdpUpdate('mid')
-  
   return c.json({
     success: true, itinerary, languageTips: langTips, packingList, restaurants,
     photos: topPlaces.filter(p=>p.photo).map(p=>({name:p.name,url:p.photo})),
     emergencyContacts, safetyTips,
-    mdpAction: action, reward,
   })
 })
 
@@ -893,16 +1196,40 @@ app.post('/api/generate-multi-city', async (c) => {
   }
 })
 
-// Rate Activity
+// Rate Activity — Updates Bayesian + POMDP + Q-Learning
 app.post('/api/rate', async (c) => {
   const { activity, rating, category='cultural', destination='', day=1 } = await c.req.json()
   bayesianUpdate(category, rating)
-  const obs = rating >= 4 ? 'high' : rating >= 3 ? 'mid' : 'low'
-  pomdpUpdate(obs)
-  const stateKey = `${destination}|${day}|rate`
-  const reward = computeReward(rating, 0.8, 0.7, 50)
-  qUpdate(stateKey, rating >= 4 ? 'keep_plan' : 'swap_activity', reward)
-  return c.json({success:true, reward, bayesian:aiState.bayesian, dirichlet:aiState.dirichlet, pomdpBelief:aiState.pomdpBelief, rewards:aiState.rewards.slice(-20)})
+  
+  // POMDP observations based on rating
+  if (rating >= 4) pomdpUpdate('high_rating')
+  else if (rating >= 3) pomdpUpdate('mid')
+  else pomdpUpdate('low_rating')
+  
+  // Q-Learning update with rating-based reward
+  const stateKey = `${destination}|d${day}|${category}|rated`
+  const action = rating >= 4 ? 'keep_plan' : rating >= 3 ? 'adjust_budget' : 'swap_activity'
+  const denseR = computeDenseReward({
+    rating, budgetAdherence: 0.8, weatherSafety: 0.7,
+    crowdLevel: 50, timeEfficiency: 0.8, diversityBonus: 0.6
+  })
+  const qlResult = qUpdate(stateKey, action, denseR)
+  
+  return c.json({
+    success: true, 
+    reward: denseR,
+    tdError: qlResult.tdError,
+    bayesian: aiState.bayesian, 
+    dirichlet: aiState.dirichlet, 
+    pomdpBelief: aiState.pomdpBelief, 
+    denseRewards: aiState.denseRewards.slice(-30),
+    sparseRewards: aiState.sparseRewards.slice(-20),
+    totalRewards: aiState.totalRewards.slice(-30),
+    epsilon: aiState.epsilon,
+    episode: aiState.episode,
+    totalSteps: aiState.totalSteps,
+    thompsonPrefs: getThompsonPreferences(),
+  })
 })
 
 // Search Flights
@@ -1000,11 +1327,22 @@ app.get('/api/nearby', async (c) => {
   } catch(e) { return c.json({success:true, places:[]}) }
 })
 
-// AI State
+// AI State — Full RL state
 app.get('/api/ai-state', (c) => c.json({
   bayesian: aiState.bayesian, dirichlet: aiState.dirichlet,
-  pomdpBelief: aiState.pomdpBelief, rewards: aiState.rewards.slice(-20),
-  qTableSize: Object.keys(aiState.qTable).length, epsilon: aiState.epsilon,
+  pomdpBelief: aiState.pomdpBelief, 
+  denseRewards: aiState.denseRewards.slice(-30),
+  sparseRewards: aiState.sparseRewards.slice(-20),
+  totalRewards: aiState.totalRewards.slice(-30),
+  cumulativeReward: aiState.cumulativeReward,
+  qTableSize: Object.keys(aiState.qTable).length, 
+  epsilon: aiState.epsilon,
+  episode: aiState.episode,
+  totalSteps: aiState.totalSteps,
+  alpha: aiState.alpha,
+  gamma: aiState.gamma,
+  thompsonPrefs: getThompsonPreferences(),
+  agentDecisions: aiState.agentDecisions.slice(-10),
 }))
 
 // Chatbot — Enhanced with context-aware responses
