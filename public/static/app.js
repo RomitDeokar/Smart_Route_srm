@@ -138,9 +138,11 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateClocks, 1000);
   document.getElementById('startDate').valueAsDate = new Date();
   updateAtlasStats();
-  // 5. Fetch initial AI state from backend
+  // 5. Initialize enhanced state (journal, readiness)
+  initEnhancedState();
+  // 6. Fetch initial AI state from backend
   fetchAIState();
-  // 6. Set up chatbot enter key
+  // 7. Set up chatbot enter key
   const chatInput = document.getElementById('chatInput');
   if (chatInput) {
     chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
@@ -410,13 +412,13 @@ async function generateTrip() {
 
   // Simulate agent activation sequence
   const agentSequence = [
-    {id:'planner', msg:`Analyzing ${destination}... running MCTS with 30 iterations for optimal route.`, delay:300},
-    {id:'weather', msg:`Fetching weather data from OpenMeteo API... applying Naive Bayes classification.`, delay:600},
-    {id:'crowd', msg:`Computing crowd heuristics for time-of-day optimization.`, delay:400},
-    {id:'budget', msg:`Optimizing ₹${budget.toLocaleString()} budget using MDP reward function.`, delay:500},
-    {id:'preference', msg:`Loading Bayesian Beta priors for ${state.persona} persona.`, delay:300},
-    {id:'booking', msg:`Preparing multi-platform booking search for ${origin || 'your location'} → ${destination}.`, delay:400},
-    {id:'explain', msg:`Generating MDP decision trace and POMDP belief state.`, delay:300},
+    {id:'planner', msg:`Analyzing ${destination}... running MCTS with 50 iterations for optimal route.`, delay:80},
+    {id:'weather', msg:`Fetching weather data from OpenMeteo API... applying Naive Bayes classification.`, delay:80},
+    {id:'crowd', msg:`Computing crowd heuristics for time-of-day optimization.`, delay:60},
+    {id:'budget', msg:`Optimizing ₹${budget.toLocaleString()} budget using MDP reward function.`, delay:60},
+    {id:'preference', msg:`Loading Bayesian Beta priors for ${state.persona} persona.`, delay:50},
+    {id:'booking', msg:`Preparing multi-platform booking search for ${origin || 'your location'} → ${destination}.`, delay:50},
+    {id:'explain', msg:`Generating MDP decision trace and POMDP belief state.`, delay:40},
   ];
 
   for (const step of agentSequence) {
@@ -2173,11 +2175,11 @@ function _addTripToSaved(itin) {
   }
 }
 
-// Enhanced DOMContentLoaded
-document.addEventListener('DOMContentLoaded', () => {
+// Init journal & readiness on first load (called from main DOMContentLoaded)
+function initEnhancedState() {
   renderJournalEntries();
   updateReadinessScore();
-});
+}
 
 // ============================================
 // AUTOMATION: Route Optimizer

@@ -221,10 +221,11 @@ function gammaSample(shape: number): number {
     return gammaSample(shape + 1) * Math.pow(Math.random(), 1 / shape)
   }
   const d = shape - 1/3; const c = 1/Math.sqrt(9*d)
-  while(true) {
+  for (let iter = 0; iter < 1000; iter++) {
     let x = gaussianRandom(); let v = Math.pow(1 + c*x, 3)
     if (v > 0 && Math.log(Math.random()) < 0.5*x*x + d - d*v + d*Math.log(v)) return d*v
   }
+  return shape // fallback to avoid infinite loop
 }
 
 // Get personalized category preferences via Thompson Sampling
@@ -656,28 +657,39 @@ async function fetchWeather(lat: number, lon: number, days: number): Promise<any
   } catch(e) { return [] }
 }
 
+// In-memory photo cache to avoid redundant API calls
+const _photoCache: Record<string, string> = {}
+
 async function fetchWikiPhoto(name: string): Promise<string> {
-  // Try exact title first, then search
-  const attempts = [name, name.replace(/\s+(temple|fort|beach|palace|museum|church|mosque|garden|park|lake)/i, ' ($1)')]
-  for (const title of attempts) {
-    try {
-      const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&titles=${encodeURIComponent(title)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&origin=*`)
-      const d: any = await r.json()
-      const pages = d?.query?.pages || {}
-      for (const p of Object.values(pages) as any[]) {
-        if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg') && !p.thumbnail.source.includes('Flag_of')) return p.thumbnail.source
-      }
-    } catch(e) {}
-  }
-  // Try Wikipedia search API as fallback
+  const cacheKey = name.toLowerCase().trim()
+  if (_photoCache[cacheKey] !== undefined) return _photoCache[cacheKey]
+  
+  // Try exact title first (most likely to succeed)
   try {
-    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=3&prop=pageimages&piprop=thumbnail&pithumbsize=600&origin=*`)
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&titles=${encodeURIComponent(name)}&prop=pageimages&piprop=thumbnail&pithumbsize=600&redirects=1&origin=*`)
     const d: any = await r.json()
     const pages = d?.query?.pages || {}
     for (const p of Object.values(pages) as any[]) {
-      if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg') && !p.thumbnail.source.includes('Flag_of')) return p.thumbnail.source
+      if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg') && !p.thumbnail.source.includes('Flag_of')) {
+        _photoCache[cacheKey] = p.thumbnail.source
+        return p.thumbnail.source
+      }
     }
   } catch(e) {}
+  
+  // Try Wikipedia search API as fallback
+  try {
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrsearch=${encodeURIComponent(name)}&gsrlimit=2&prop=pageimages&piprop=thumbnail&pithumbsize=600&origin=*`)
+    const d: any = await r.json()
+    const pages = d?.query?.pages || {}
+    for (const p of Object.values(pages) as any[]) {
+      if (p.thumbnail?.source && !p.thumbnail.source.includes('.svg') && !p.thumbnail.source.includes('Flag_of')) {
+        _photoCache[cacheKey] = p.thumbnail.source
+        return p.thumbnail.source
+      }
+    }
+  } catch(e) {}
+  _photoCache[cacheKey] = ''
   return ''
 }
 
@@ -856,16 +868,25 @@ async function buildMultiCityTrip(cities: string[], daysPerCity: number[], total
   const budgetPerCity = totalBudget / cities.length
   let originCoords = origin ? await geocode(origin) : {lat:13.08,lon:80.27,name:'Chennai'}
 
+  // Pre-geocode all cities in parallel
+  const geoResults = await Promise.all(cities.map(city => geocode(city)))
+
   for (let i = 0; i < cities.length; i++) {
     const city = cities[i]
     const days = daysPerCity[i] || 2
-    const destGeo = await geocode(city)
+    const destGeo = geoResults[i]
     const [attractions, weather] = await Promise.all([
       fetchAttractions(destGeo.lat, destGeo.lon, city, days),
       fetchWeather(destGeo.lat, destGeo.lon, days)
     ])
-    const topPlaces = attractions.slice(0, 8)
-    const photos = await Promise.all(topPlaces.map(p => fetchWikiPhoto(p.wikiTitle || p.name)))
+    const topPlaces = attractions.slice(0, 6)
+    const photoPromises = topPlaces.map(p => 
+      Promise.race([
+        fetchWikiPhoto(p.wikiTitle || p.name),
+        new Promise<string>(resolve => setTimeout(() => resolve(''), 2500))
+      ])
+    )
+    const photos = await Promise.all(photoPromises)
     topPlaces.forEach((p, j) => { if (photos[j]) p.photo = photos[j] })
     
     const itinerary = buildItinerary(attractions, weather, days, budgetPerCity, city, persona, i===0 ? origin : cities[i-1], i===0 ? originCoords : {lat: cityResults[i-1]?.destCoords?.lat, lon: cityResults[i-1]?.destCoords?.lon})
@@ -1267,9 +1288,15 @@ app.post('/api/generate-trip', async (c) => {
     fetchWeather(destGeo.lat, destGeo.lon, duration)
   ])
   
-  // Fetch photos in parallel (up to 12)
-  const topPlaces = attractions.slice(0, 12)
-  const photos = await Promise.all(topPlaces.map(p => fetchWikiPhoto(p.wikiTitle || p.name)))
+  // Fetch photos in parallel with timeout (up to 8 to keep it fast)
+  const topPlaces = attractions.slice(0, 8)
+  const photoPromises = topPlaces.map(p => 
+    Promise.race([
+      fetchWikiPhoto(p.wikiTitle || p.name),
+      new Promise<string>(resolve => setTimeout(() => resolve(''), 3000))
+    ])
+  )
+  const photos = await Promise.all(photoPromises)
   topPlaces.forEach((p, i) => { if (photos[i]) p.photo = photos[i] })
   
   const itinerary = buildItinerary(attractions, weather, duration, budget, destGeo.name || resolvedDest, persona, origin, originGeo)
