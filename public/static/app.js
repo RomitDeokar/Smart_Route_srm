@@ -508,8 +508,8 @@ async function generateTrip() {
     renderTripCountdown(data.itinerary);
     updateReadinessScore();
 
-    document.getElementById('insightsPanel').style.display = 'block';
-    showToast(`✅ ${destination} trip generated with ${data.itinerary.days_data.reduce((s,d)=>s+d.activities.length,0)} activities!`, 'success');
+    try { document.getElementById('insightsPanel').style.display = 'block'; } catch(e) {}
+    showToast(`${destination} trip ready! ${data.itinerary.days_data.reduce((s,d)=>s+d.activities.length,0)} activities planned`, 'success');
 
     // Auto-scroll to booking wizard with agentic AI feel
     setTimeout(() => {
@@ -987,7 +987,8 @@ function switchView(view) {
   document.getElementById('view-packing').style.display = view === 'packing' ? 'block' : 'none';
   const dashEl = document.getElementById('view-dashboard');
   if (dashEl) dashEl.style.display = view === 'dashboard' ? 'block' : 'none';
-  document.getElementById('bottomPanels').style.display = view === 'planner' ? 'grid' : 'none';
+  const bp = document.getElementById('bottomPanels');
+  if (bp) bp.style.display = view === 'planner' ? 'grid' : 'none';
 
   if (view === 'atlas') { setTimeout(() => renderAtlasMap(), 150); }
   if (view === 'planner' && state.map) { 
@@ -1714,13 +1715,64 @@ function updateClocks() {
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================
+// Loading screen with beautiful image carousel
+let _loadingCarouselInterval = null;
+let _loadingProgressInterval = null;
+
 function showLoading(show) {
   const overlay = document.getElementById('loadingOverlay');
   overlay.classList.toggle('active', show);
+  
   if (show) {
-    document.getElementById('loadingAgents').innerHTML = AGENTS.map((a,i) =>
-      `<div class="loading-agent" style="animation-delay:${i*0.15}s">${a.icon}</div>`
-    ).join('');
+    // Start image carousel
+    let imgIdx = 0;
+    const imgs = document.querySelectorAll('.loading-travel-img');
+    if (imgs.length) {
+      imgs.forEach(img => img.classList.remove('active'));
+      imgs[0].classList.add('active');
+    }
+    _loadingCarouselInterval = setInterval(() => {
+      if (imgs.length) {
+        imgs[imgIdx].classList.remove('active');
+        imgIdx = (imgIdx + 1) % imgs.length;
+        imgs[imgIdx].classList.add('active');
+      }
+    }, 2500);
+    
+    // Animate progress bar
+    const progressFill = document.getElementById('loadingProgressFill');
+    if (progressFill) progressFill.style.width = '0%';
+    let progress = 0;
+    const loadingSteps = [
+      'Analyzing destination...',
+      'Fetching weather data...',
+      'Finding top attractions...',
+      'Optimizing your route...',
+      'Checking crowd levels...',
+      'Balancing your budget...',
+      'Generating itinerary...',
+      'Almost ready...'
+    ];
+    let stepIdx = 0;
+    _loadingProgressInterval = setInterval(() => {
+      progress = Math.min(progress + Math.random() * 8 + 2, 92);
+      if (progressFill) progressFill.style.width = progress + '%';
+      const stepEl = document.getElementById('loadingStep');
+      if (stepEl && stepIdx < loadingSteps.length) {
+        stepEl.textContent = loadingSteps[stepIdx];
+        stepIdx++;
+      }
+    }, 800);
+  } else {
+    // Complete progress
+    const progressFill = document.getElementById('loadingProgressFill');
+    if (progressFill) progressFill.style.width = '100%';
+    const stepEl = document.getElementById('loadingStep');
+    if (stepEl) stepEl.textContent = 'Done!';
+    
+    // Clean up intervals
+    if (_loadingCarouselInterval) { clearInterval(_loadingCarouselInterval); _loadingCarouselInterval = null; }
+    if (_loadingProgressInterval) { clearInterval(_loadingProgressInterval); _loadingProgressInterval = null; }
   }
 }
 
@@ -2398,7 +2450,7 @@ function autoGenerateChecklist() {
 function renderSmartSuggestions(itin) {
   const panel = document.getElementById('smartSuggestionsPanel');
   const grid = document.getElementById('smartSuggestionsGrid');
-  if (!itin?.days_data?.length) return;
+  if (!itin?.days_data?.length || !panel || !grid) return;
   
   panel.style.display = 'block';
   

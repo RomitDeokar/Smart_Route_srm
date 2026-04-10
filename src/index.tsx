@@ -1571,11 +1571,7 @@ app.post('/api/chat', async (c) => {
   }
   // 3. Specific question about current trip
   else if (dest && /what|how|tell|show|give|suggest|recommend/i.test(lower) && /my\s+trip|itinerary|plan|schedule/i.test(lower)) {
-    if (state_summary()) {
-      response = state_summary()
-    } else {
-      response = `📋 Your current trip to **${dest}** is active. Here are things I can help with:\n\n- "Optimize my route" — reduce travel time\n- "Balance my budget" — even spending across days\n- "Avoid crowds" — reorder for low-crowd times\n- "Add food stops" — insert meal breaks\n- "Emergency replan" — handle weather/delays\n\nUse the **Smart Automations** panel on the right for one-click optimizations!`
-    }
+    response = `📋 Your trip to **${dest}** is active! I can help with:\n\n- "Optimize my route"\n- "Balance my budget"\n- "Avoid crowds"\n- "Add food stops"\n- "Emergency replan"\n\nUse **Smart Automations** for one-click optimizations!`
   }
   // 4. Weather queries
   else if (/weather|forecast|rain|temperature|hot|cold|humid/i.test(lower)) {
@@ -1666,10 +1662,6 @@ function extractCityAfter(text: string, keyword: string): string {
   if (idx < 0) return ''
   const after = text.substring(idx + keyword.length).trim()
   return extractCity(after) || after.split(/\s+/)[0] || ''
-}
-
-function state_summary(): string {
-  return ''
 }
 
 // ============================================
