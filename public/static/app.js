@@ -1284,14 +1284,43 @@ function renderBookingResults(title, results, type) {
       </div>
     `).join('');
   } else if (type === 'hotel') {
-    list.innerHTML = results.map(h => `
-      <div class="booking-card" onclick="selectBooking('hotels',${JSON.stringify(h).replace(/"/g,'&quot;')},this)">
-        <div class="booking-card-title">${h.name} ${'⭐'.repeat(h.stars)}</div>
-        <div class="booking-card-price">₹${h.price_per_night.toLocaleString()}/night</div>
-        <div class="booking-card-meta">Total: ₹${h.total_price.toLocaleString()} · Rating: ${h.rating} · ${h.amenities.slice(0,4).join(', ')}${h.amenities.length>4 ? ' +more' : ''}</div>
-        ${renderPlatforms(h.bookingPlatforms, h.bookingUrl, 'Booking.com')}
+    list.innerHTML = results.map(h => {
+      const isHostel = !!h.applyRequired;
+      const isSrmOfficial = !!h.srmOfficial;
+      const priceLabel = (isHostel || h.price_per_night === 0)
+        ? `<span style="color:var(--accent,#0a84ff);font-weight:700">On Request — Apply Required</span>`
+        : `₹${(h.price_per_night||0).toLocaleString()}/night`;
+      const totalLabel = (isHostel || h.total_price === 0)
+        ? `Allocation by SRM Hostel Office`
+        : `Total: ₹${(h.total_price||0).toLocaleString()}`;
+      const badges = [];
+      if (isSrmOfficial) badges.push(`<span class="tag" style="background:#1d4ed8;color:#fff;font-weight:600">🏛️ SRM Official</span>`);
+      if (isHostel) {
+        const ht = h.hostelType === 'girls' ? 'Girls Hostel' : (h.hostelType === 'boys' ? 'Boys Hostel' : 'Hostel');
+        badges.push(`<span class="tag" style="background:#10b981;color:#fff;font-weight:600">🛏️ ${ht}</span>`);
+      }
+      const applyButton = isHostel ? `
+        <div style="margin-top:8px">
+          <a href="${h.applyUrl || h.bookingUrl || '#'}" target="_blank" rel="noopener"
+             onclick="event.stopPropagation();showToast('Opening SRM Hostel application portal…','info')"
+             class="btn btn-primary"
+             style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;text-decoration:none;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border-radius:8px;font-weight:600;font-size:0.85rem">
+            📝 Apply for Hostel Accommodation
+          </a>
+        </div>` : '';
+      return `
+      <div class="booking-card${isSrmOfficial?' srm-highlight':''}" onclick="selectBooking('hotels',${JSON.stringify(h).replace(/"/g,'&quot;')},this)"
+           style="${isSrmOfficial?'border:2px solid #1d4ed8;background:linear-gradient(180deg,rgba(29,78,216,0.06),transparent)':''}">
+        <div class="booking-card-title">${h.name} ${'⭐'.repeat(h.stars||0)} ${badges.join(' ')}</div>
+        <div class="booking-card-price">${priceLabel}</div>
+        <div class="booking-card-meta">${totalLabel} · Rating: ${h.rating} · ${(h.amenities||[]).slice(0,4).join(', ')}${(h.amenities||[]).length>4 ? ' +more' : ''}</div>
+        ${h.address ? `<div class="text-xs text-muted" style="margin-top:4px">📍 ${h.address}</div>` : ''}
+        ${h.description ? `<div class="text-xs text-muted" style="margin-top:4px">${h.description}</div>` : ''}
+        ${applyButton}
+        ${renderPlatforms(h.bookingPlatforms, h.bookingUrl, isHostel ? 'Apply on SRMIST Portal' : 'Booking.com')}
       </div>
-    `).join('');
+    `;
+    }).join('');
   } else if (type === 'cab') {
     list.innerHTML = results.map(c => `
       <div class="booking-card" onclick="selectBooking('cabs',${JSON.stringify(c).replace(/"/g,'&quot;')},this)">
@@ -1331,7 +1360,15 @@ function showReviewCart() {
   const items = [];
   if (cart.flights) { items.push({label:`✈️ ${cart.flights.airline} ${cart.flights.flight_no}`, price:cart.flights.price}); total += cart.flights.price; }
   if (cart.trains) { items.push({label:`🚂 ${cart.trains.train_name}`, price:cart.trains.price}); total += cart.trains.price; }
-  if (cart.hotels) { items.push({label:`🏨 ${cart.hotels.name}`, price:cart.hotels.total_price}); total += cart.hotels.total_price; }
+  if (cart.hotels) {
+    const isHostel = !!cart.hotels.applyRequired;
+    const hPrice = isHostel ? 0 : (cart.hotels.total_price || 0);
+    const label = isHostel
+      ? `🏨 ${cart.hotels.name} <span style="color:var(--accent,#0a84ff);font-size:0.75rem">(Apply via SRM Portal)</span>`
+      : `🏨 ${cart.hotels.name}`;
+    items.push({ label, price: hPrice });
+    total += hPrice;
+  }
   if (cart.cabs) { items.push({label:`🚗 ${cart.cabs.provider} ${cart.cabs.type}`, price:cart.cabs.base_fare}); total += cart.cabs.base_fare; }
 
   document.getElementById('cartSummary').innerHTML = items.length ?

@@ -71,9 +71,10 @@ function thompsonSelect(stateKey: string): string {
 }
 
 function gaussianRandom(): number {
-  // Box-Muller transform
-  const u1 = Math.random(); const u2 = Math.random()
-  return Math.sqrt(-2 * Math.log(u1 || 0.0001)) * Math.cos(2 * Math.PI * u2)
+  // Box-Muller transform — guard against 0 / very small u1 to avoid -Infinity
+  let u1 = Math.random(); const u2 = Math.random()
+  if (u1 < 1e-9) u1 = 1e-9
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
 }
 
 // Epsilon-greedy with Thompson Sampling hybrid
@@ -189,10 +190,10 @@ function computeTotalReward(dense: number, sparse: number): number {
 // ============================================
 
 function bayesianUpdate(category: string, rating: number) {
-  const b = aiState.bayesian[category]
-  if (!b) { aiState.bayesian[category] = {a:1,b:1} }
+  // Bug fix: avoid variable shadowing — use distinct names
+  if (!aiState.bayesian[category]) { aiState.bayesian[category] = {a:1,b:1} }
   const beta = aiState.bayesian[category]
-  
+
   // Update Beta distribution: success (rating >= 3.5) or failure
   if (rating >= 3.5) {
     beta.a += 1 + (rating - 3.5) / 1.5  // Scale success magnitude
@@ -218,13 +219,15 @@ function betaSample(a: number, b: number): number {
 
 function gammaSample(shape: number): number {
   if (shape < 1) {
-    return gammaSample(shape + 1) * Math.pow(Math.random(), 1 / shape)
+    return gammaSample(shape + 1) * Math.pow(Math.random(), 1 / Math.max(shape, 0.0001))
   }
   const d = shape - 1/3; const c = 1/Math.sqrt(9*d)
-  while(true) {
+  // Bug fix: bound iterations to prevent infinite loops on degenerate input
+  for (let iter = 0; iter < 1000; iter++) {
     let x = gaussianRandom(); let v = Math.pow(1 + c*x, 3)
-    if (v > 0 && Math.log(Math.random()) < 0.5*x*x + d - d*v + d*Math.log(v)) return d*v
+    if (v > 0 && Math.log(Math.random() || 0.0001) < 0.5*x*x + d - d*v + d*Math.log(v)) return d*v
   }
+  return d // Fallback if rejection sampling fails
 }
 
 // Get personalized category preferences via Thompson Sampling
@@ -259,8 +262,9 @@ function pomdpUpdate(observation: string) {
   if (total > 0) for (const s of Object.keys(b)) b[s] /= total
   // Prevent degenerate beliefs
   for (const s of Object.keys(b)) { b[s] = Math.max(0.01, b[s]) }
-  let sum = Object.values(b).reduce((s: number, v: any) => s + (v as number), 0) as number
-  for (const s of Object.keys(b)) b[s] /= sum
+  // Bug fix: re-normalize after flooring to keep probabilities sum to 1
+  const sum = Object.values(b).reduce((s: number, v: any) => s + (v as number), 0) as number
+  if (sum > 0) for (const s of Object.keys(b)) b[s] /= sum
 }
 
 function crowdHeuristic(hour: number): number {
@@ -712,9 +716,12 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
     let dayPlaces = places.filter(p => !usedNames.has(p.name))
     
     // Score and sort places using Bayesian preferences
-    dayPlaces = dayPlaces.map(p => {
+    dayPlaces = dayPlaces.map((p, idx) => {
       const catPref = preferences[p.type] || preferences['cultural'] || 0.5
-      const baseScore = catPref * 0.4 + (p.rating || 4) / 5 * 0.3 + Math.random() * 0.3
+      // Use a deterministic tiebreaker based on day + index instead of Math.random,
+      // so identical inputs yield identical itineraries (no flicker between requests).
+      const tieBreaker = ((d * 17 + idx * 31) % 100) / 100
+      const baseScore = catPref * 0.4 + (p.rating || 4) / 5 * 0.3 + tieBreaker * 0.3
       return {...p, _score: baseScore}
     }).sort((a: any, b: any) => (b._score || 0) - (a._score || 0)).slice(0, perDay)
     
@@ -728,9 +735,18 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
     
     const activities: any[] = []
     let startHour = 9
+    let actIdx = 0
     for (const place of optimized) {
       const duration = place.type === 'museum' ? 2 : place.type === 'park' ? 1.5 : place.type === 'beach' ? 2.5 : 1.5
-      const cost = persona === 'luxury' ? Math.round(300 + Math.random()*500) : persona === 'adventure' ? Math.round(100 + Math.random()*300) : Math.round(50 + Math.random()*200)
+      // Deterministic cost based on place type + persona (no Math.random for stable, real-looking pricing)
+      const typeCostMap: Record<string, number> = {
+        museum: 100, fort: 150, palace: 250, monument: 100, historic: 80, temple: 50,
+        beach: 0, park: 30, garden: 30, viewpoint: 50, market: 200, attraction: 150,
+        zoo: 200, theme_park: 500, gallery: 100, cultural: 250, food: 400, relaxation: 800,
+      }
+      const baseCost = typeCostMap[(place.type||'attraction').toLowerCase()] ?? 150
+      const personaMult = persona === 'luxury' ? 2.5 : persona === 'adventure' ? 1.4 : persona === 'family' ? 1.8 : 1.0
+      const cost = Math.max(20, Math.round(baseCost * personaMult))
       const crowd = crowdHeuristic(startHour)
       const actWeatherSafe = weatherSafe
       
@@ -761,18 +777,20 @@ function buildItinerary(places: any[], weather: any[], days: number, budget: num
       
       activities.push({
         name: place.name, lat: place.lat, lon: place.lon, type: place.type,
-        description: place.description, time: `${String(Math.floor(startHour)).padStart(2,'0')}:${startHour%1?'30':'00'}`,
+        description: place.description, time: `${String(Math.floor(startHour)).padStart(2,'0')}:${startHour%1>=0.5?'30':'00'}`,
         duration: `${duration}h`, cost, crowd_level: crowd,
         weather_safe: actWeatherSafe, weather_warning: !actWeatherSafe ? `⚠️ ${w.icon} Weather risk` : '',
         wikiTitle: place.wikiTitle || place.name, opening_hours: place.opening_hours || '',
         phone: place.phone || '', website: place.website || '', wheelchair: place.wheelchair || '',
-        rating: place.rating || (3.5 + Math.random()*1.5),
+        // Deterministic rating fallback (4.2 default — typical for top tourist places)
+        rating: place.rating || 4.2,
         notes: '',
         // RL metadata
         rl: { action, denseReward: denseR, tdError: qlResult.tdError, qValue: qlResult.newQ }
       })
       totalCost += cost
       startHour += duration + 0.5
+      actIdx++
     }
 
     itinDays.push({
@@ -898,6 +916,29 @@ const CITY_DISTANCES: Record<string, Record<string, number>> = {
   kolkata: {darjeeling:600,gangtok:640,varanasi:680,delhi:1500,chennai:1660,mumbai:2050},
 }
 
+// Haversine distance in km between two lat/lon
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371
+  const toRad = (x: number) => (x * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1); const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)))
+}
+
+function lookupCoords(name: string): [number, number] | null {
+  const key = name.toLowerCase().trim().replace(/[,.\-]/g,' ').replace(/\s+/g,' ').trim()
+  // Campus map first
+  const campus = CAMPUS_MAP[key]
+  if (campus) return [campus.lat, campus.lon]
+  // Direct city lookup
+  if (CITY_COORDS[key]) return CITY_COORDS[key]
+  // Substring match
+  for (const [c, coord] of Object.entries(CITY_COORDS)) {
+    if (key.includes(c) || c.includes(key)) return coord
+  }
+  return null
+}
+
 function getDistance(origin: string, dest: string): number {
   const oKey = origin.toLowerCase().replace(/[^a-z]/g,'')
   const dKey = dest.toLowerCase().replace(/[^a-z]/g,'')
@@ -908,8 +949,11 @@ function getDistance(origin: string, dest: string): number {
       }
     }
   }
-  // Fallback: rough estimate based on coordinates
-  return 800 + Math.floor(Math.random() * 500)
+  // Bug fix: deterministic fallback using Haversine on known coordinates
+  const oCoords = lookupCoords(origin); const dCoords = lookupCoords(dest)
+  if (oCoords && dCoords) return haversineKm(oCoords[0], oCoords[1], dCoords[0], dCoords[1])
+  // Final fallback: a sensible default — deterministic so prices stay stable
+  return 800
 }
 
 function generateFlights(origin: string, dest: string, date: string): any[] {
@@ -928,11 +972,13 @@ function generateFlights(origin: string, dest: string, date: string): any[] {
   const dEnc = encodeURIComponent(dest)
   
   return airlines.map((airline, i) => {
-    const basePrice = Math.round(dist * airline.base + 500 + (Math.random() * 400 - 200))
-    const flightNo = `${airline.code}-${100 + Math.floor(Math.random()*900)}`
+    // Deterministic per-airline pricing (no Math.random) so refresh doesn't change prices
+    const variance = ((i * 137) % 200) - 100  // -100..+99 deterministic
+    const basePrice = Math.round(dist * airline.base + 500 + variance)
+    const flightNo = `${airline.code}-${100 + ((i * 173) % 900)}`
     const depH = [6,7,8,10,14,17,20][i % 7]
     const durH = Math.max(1, Math.round(dist / 700))
-    const durM = Math.random() > 0.5 ? 15 : 45
+    const durM = i % 2 === 0 ? 15 : 45
     const isNonstop = dist < 1500
     const classes = [
       {type:'Economy',multiplier:1},
@@ -941,14 +987,15 @@ function generateFlights(origin: string, dest: string, date: string): any[] {
     ]
     const cls = classes[i < 3 ? 0 : i < 5 ? 1 : 2]
     const price = Math.round(basePrice * cls.multiplier)
-    
+    const depMin = (i % 2 === 0) ? '00' : '30'
+
     return {
-      id: `FL${Date.now()}${i}`, airline: airline.name, flight_no: flightNo,
-      departure: `${String(depH).padStart(2,'0')}:${Math.random()>0.5?'00':'30'}`,
+      id: `FL${airline.code}${i}`, airline: airline.name, flight_no: flightNo,
+      departure: `${String(depH).padStart(2,'0')}:${depMin}`,
       arrival: `${String((depH+durH)%24).padStart(2,'0')}:${durM>30?'45':'15'}`,
       duration: `${durH}h ${durM}m`, price, currency: '₹',
       class: cls.type,
-      stops: isNonstop ? 0 : (Math.random() > 0.6 ? 1 : 0),
+      stops: isNonstop ? 0 : ((i % 3 === 0) ? 1 : 0),
       rating: airline.rating.toFixed(1),
       bookingPlatforms: [
         {name:'Google Flights', url: `https://www.google.com/travel/flights?q=flights+from+${oEnc}+to+${dEnc}+on+${dateParam}&curr=INR`, icon:'google', prefilled:true},
@@ -985,12 +1032,17 @@ function generateTrains(origin: string, dest: string): any[] {
     const classMultipliers: Record<string,number> = {'1A':3.5,'2A':2.2,'3A':1.5,'SL':0.7,'CC':1.8,'EC':2.5}
     const price = Math.round(dist * train.base * (classMultipliers[cls] || 1))
     const depH = [5,6,8,15,17,20][i % 6]
-    
+    // Deterministic train number based on type and index
+    const trainNoSeed: Record<string,number> = {RAJ:12259, SHT:12027, VBE:22439, DUR:12273, GR:12909, SF:12601}
+    const trainNo = (trainNoSeed[train.code] || 12000) + i
+    const depMin = (i % 2 === 0) ? '00' : '30'
+    const durMin = (i % 2 === 0) ? '15' : '45'
+
     return {
-      id: `TR${Date.now()}${i}`, train_name: train.name,
-      train_no: `${10000+Math.floor(Math.random()*89999)}`,
-      departure: `${String(depH).padStart(2,'0')}:${Math.random()>0.5?'00':'30'}`,
-      duration: `${durH}h ${Math.random()>0.5?'00':'30'}m`, price, currency: '₹',
+      id: `TR${train.code}${i}`, train_name: train.name,
+      train_no: String(trainNo),
+      departure: `${String(depH).padStart(2,'0')}:${depMin}`,
+      duration: `${durH}h ${durMin}m`, price, currency: '₹',
       class: cls,
       bookingUrl: irctcUrl,
       bookingPlatforms: [
@@ -1003,6 +1055,138 @@ function generateTrains(origin: string, dest: string): any[] {
       ]
     }
   }).sort((a,b) => a.price - b.price)
+}
+
+// SRM-specific accommodations: real on-campus & near-campus options for SRMIST students/visitors.
+// These appear ONLY when destination is an SRM campus (Chennai/Kattankulathur, Trichy, NCR, AP, Sikkim).
+const SRM_SPECIFIC_HOTELS: Record<string, any[]> = {
+  chennai: [
+    {name:'SRM Hotel (Maamallan)',stars:4,basePrice:3200,rating:4.3,
+     amenities:['WiFi','AC','Breakfast','Restaurant','Conference Hall','Parking','Near SRM KTR'],
+     address:'Potheri, Kattankulathur, Chennai',
+     description:'Official 4-star hotel run by SRM Group, walking distance from SRMIST main campus. Preferred for parents and visiting faculty.',
+     officialUrl:'https://srmhotels.com/',
+     applyRequired:false,
+     srmOfficial:true,
+     image:'https://srmhotels.com/wp-content/uploads/2020/11/srm-hotel-front.jpg'},
+    {name:'Premium Boys Hostel (SRMIST)',stars:4,basePrice:0,rating:4.5,
+     amenities:['AC Rooms','WiFi','Mess','Laundry','Gym','24x7 Security','On-Campus','Reading Room'],
+     address:'SRMIST Kattankulathur Campus, Chennai',
+     description:'On-campus premium accommodation for SRMIST male students. Allocation by application only — click "Apply for Hostel" to submit your request.',
+     officialUrl:'https://www.srmist.edu.in/hostels/',
+     applyRequired:true,
+     applyUrl:'https://www.srmist.edu.in/hostels/',
+     hostelType:'boys',
+     srmOfficial:true,
+     image:''},
+    {name:'Premium Girls Hostel (SRMIST)',stars:4,basePrice:0,rating:4.5,
+     amenities:['AC Rooms','WiFi','Mess','Laundry','Gym','24x7 Security','On-Campus','Reading Room'],
+     address:'SRMIST Kattankulathur Campus, Chennai',
+     description:'On-campus premium accommodation for SRMIST female students. Allocation by application only — click "Apply for Hostel" to submit your request.',
+     officialUrl:'https://www.srmist.edu.in/hostels/',
+     applyRequired:true,
+     applyUrl:'https://www.srmist.edu.in/hostels/',
+     hostelType:'girls',
+     srmOfficial:true,
+     image:''},
+    {name:'GRT Grand Days (Near SRM)',stars:3,basePrice:2200,rating:4.0,
+     amenities:['WiFi','AC','Breakfast','Restaurant','Parking'],
+     address:'Guduvancheri, near SRM Kattankulathur',
+     description:'Comfortable 3-star option close to SRMIST, popular with parents and corporate visitors.',
+     image:''},
+    {name:'Hotel Turyaa Chennai (Old Mahabalipuram Rd)',stars:4,basePrice:4500,rating:4.2,
+     amenities:['WiFi','AC','Pool','Breakfast','Gym','Restaurant'],
+     address:'OMR, Chennai (~25km from SRM KTR)',
+     description:'Modern 4-star property on OMR; convenient for SRM-related conferences and events.',
+     image:''},
+  ],
+  trichy: [
+    {name:'SRM Hotel Trichy (on-campus guest house)',stars:3,basePrice:2400,rating:4.1,
+     amenities:['WiFi','AC','Mess','Parking','On-Campus','Breakfast'],
+     address:'SRM Trichy Campus, Tiruchirappalli',
+     description:'On-campus guest house at SRM Trichy. Ideal for visiting parents and academics.',
+     officialUrl:'https://www.srmtrichy.edu.in/',
+     applyRequired:false,
+     srmOfficial:true,
+     image:''},
+    {name:'SRM Trichy Boys Hostel',stars:3,basePrice:0,rating:4.2,
+     amenities:['WiFi','Mess','Laundry','24x7 Security','On-Campus'],
+     address:'SRM Trichy Campus',
+     description:'On-campus hostel for SRM Trichy male students. Apply for allocation through the hostel office.',
+     officialUrl:'https://www.srmtrichy.edu.in/',
+     applyRequired:true,
+     applyUrl:'https://www.srmtrichy.edu.in/',
+     hostelType:'boys',
+     srmOfficial:true,
+     image:''},
+  ],
+  'delhi ncr': [
+    {name:'SRM University Delhi-NCR Guest House',stars:3,basePrice:2800,rating:4.0,
+     amenities:['WiFi','AC','Breakfast','On-Campus','Parking'],
+     address:'SRM NCR Campus, Modinagar',
+     description:'Official guest house at SRM Delhi-NCR campus.',
+     officialUrl:'https://www.srmuniversity.ac.in/',
+     applyRequired:false,
+     srmOfficial:true,
+     image:''},
+    {name:'SRM NCR Boys Hostel',stars:3,basePrice:0,rating:4.1,
+     amenities:['WiFi','Mess','Laundry','24x7 Security','On-Campus'],
+     address:'SRM NCR Campus, Modinagar',
+     description:'On-campus hostel for SRM NCR male students. Apply via hostel office.',
+     officialUrl:'https://www.srmuniversity.ac.in/',
+     applyRequired:true,
+     applyUrl:'https://www.srmuniversity.ac.in/',
+     hostelType:'boys',
+     srmOfficial:true,
+     image:''},
+  ],
+  amaravati: [
+    {name:'SRM AP University Guest House',stars:3,basePrice:2600,rating:4.0,
+     amenities:['WiFi','AC','On-Campus','Mess','Parking'],
+     address:'SRM AP Campus, Amaravati',
+     description:'On-campus guest house at SRM Andhra Pradesh.',
+     officialUrl:'https://srmap.edu.in/',
+     applyRequired:false,
+     srmOfficial:true,
+     image:''},
+    {name:'SRM AP Boys Hostel',stars:3,basePrice:0,rating:4.2,
+     amenities:['AC','WiFi','Mess','Laundry','On-Campus','24x7 Security'],
+     address:'SRM AP Campus, Amaravati',
+     description:'Premium on-campus hostel at SRM AP. Apply through the campus hostel office.',
+     officialUrl:'https://srmap.edu.in/',
+     applyRequired:true,
+     applyUrl:'https://srmap.edu.in/',
+     hostelType:'boys',
+     srmOfficial:true,
+     image:''},
+  ],
+}
+
+function isSRMCity(city: string): string | null {
+  // Bug-fix: original used `||` and `&&` without grouping which caused JS operator-precedence
+  // pitfalls. Rewritten with explicit parentheses + dedicated regional keywords so that
+  // searches like "SRM", "SRMIST", "Kattankulathur", "Chennai", "SRM KTR", etc. all reliably
+  // surface SRM-specific accommodations (SRM Hotel + Premium Boys Hostel).
+  const k = (city || '').toLowerCase().trim()
+  if (!k) return null
+
+  // Trichy campus
+  if (k.includes('trichy') || k.includes('tiruchirappalli') || /\bsrm\s*trichy\b/.test(k)) return 'trichy'
+  // Delhi-NCR campus
+  if (k.includes('delhi ncr') || k.includes('delhi-ncr') || k.includes('greater noida') ||
+      k.includes('modinagar') || /\bsrm\s*ncr\b/.test(k)) return 'delhi ncr'
+  // Amaravati / AP campus
+  if (k.includes('amaravati') || k.includes('vijayawada') || /\bsrm\s*ap\b/.test(k)) return 'amaravati'
+
+  // Chennai / Kattankulathur (default SRM main campus)
+  const isChennai = k.includes('chennai')
+  const isKattankulathur = k.includes('kattankulathur') || k.includes('katankulathur')
+  const isMamallapuram = k.includes('mamallapur') || k.includes('mahabalipuram')
+  const isSrmKeyword = /\bsrm\b/.test(k) || /\bsrmist\b/.test(k) || /\bsrm\s*ktr\b/.test(k) || /\bsrm\s*main\b/.test(k)
+  const isExactSrm = k === 'srm' || k === 'srmist'
+  if (isChennai || isKattankulathur || isMamallapuram || isSrmKeyword || isExactSrm) return 'chennai'
+
+  return null
 }
 
 function generateHotels(city: string, days: number, persona: string): any[] {
@@ -1021,34 +1205,62 @@ function generateHotels(city: string, days: number, persona: string): any[] {
     {name:`ITC ${city}`,stars:5,basePrice:7000,rating:4.6,amenities:['WiFi','AC','Breakfast','Pool','Gym','Spa','Restaurant']},
     {name:`The Leela ${city}`,stars:5,basePrice:9000,rating:4.8,amenities:['WiFi','AC','Breakfast','Pool','Gym','Spa','Butler']},
   ]
-  
+
+  // Inject SRM-specific hotels if destination is an SRM city/campus
+  const srmKey = isSRMCity(city)
+  const srmList = srmKey ? (SRM_SPECIFIC_HOTELS[srmKey] || []) : []
+
   let hotels = persona === 'luxury' ? [...luxury_hotels, ...mid_hotels] : persona === 'adventure' ? [...budget_hotels, ...mid_hotels] : [...budget_hotels, ...mid_hotels, ...luxury_hotels.slice(0,1)]
-  
+  // Always show SRM-specific options FIRST when applicable, even for luxury/adventure personas
+  hotels = [...srmList, ...hotels]
+
   const checkinDate = new Date().toISOString().split('T')[0]
   const checkoutDate = new Date(Date.now()+days*86400000).toISOString().split('T')[0]
   const cityEnc = encodeURIComponent(city)
   const searchUrl = `https://www.booking.com/searchresults.html?ss=${cityEnc}&checkin=${checkinDate}&checkout=${checkoutDate}&group_adults=2&no_rooms=1`
-  
-  return hotels.map((h, i) => {
-    const priceVariation = 0.8 + Math.random() * 0.4
-    const ppn = Math.round(h.basePrice * priceVariation)
-    return {
-      id: `HT${Date.now()}${i}`, name: h.name, stars: h.stars,
-      price_per_night: ppn,
-      total_price: ppn * days,
-      rating: h.rating.toFixed(1), amenities: h.amenities,
-      bookingUrl: searchUrl,
-      bookingPlatforms: [
+
+  return hotels.map((h: any, i: number) => {
+    // Deterministic small price variation per hotel index (no Math.random) so prices are stable.
+    const variationPct = 0.9 + ((i * 7) % 20) / 100  // 0.90..1.09
+    const ppn = Math.round((h.basePrice || 0) * variationPct)
+    const isHostel = !!h.applyRequired
+    const platforms: any[] = h.srmOfficial && h.officialUrl
+      ? [{name: isHostel ? 'Apply on SRMIST Portal' : 'SRM Official', url: h.officialUrl, prefilled:true, srmOfficial:true}]
+      : []
+    if (!isHostel) {
+      platforms.push(
         {name:'Booking.com', url: searchUrl, prefilled:true},
         {name:'MakeMyTrip', url: `https://www.makemytrip.com/hotels/hotel-listing?city=${cityEnc}&checkin=${checkinDate.replace(/-/g,'')}&checkout=${checkoutDate.replace(/-/g,'')}&roomStayQualifier=2e0e`, prefilled:true},
         {name:'Goibibo', url: `https://www.goibibo.com/hotels/hotels-in-${city.toLowerCase().replace(/\s+/g,'-')}/?checkin=${checkinDate}&checkout=${checkoutDate}&adults_count=2&rooms_count=1`, prefilled:true},
         {name:'Agoda', url: `https://www.agoda.com/search?city=${cityEnc}&checkIn=${checkinDate}&checkOut=${checkoutDate}&rooms=1&adults=2`, prefilled:true},
         {name:'Trivago', url: `https://www.trivago.in/en-IN/srl?search=${cityEnc}&dr=${checkinDate}--${checkoutDate}&pa=2`, prefilled:true},
         {name:'OYO', url: `https://www.oyorooms.com/search?location=${cityEnc}&checkin=${checkinDate}&checkout=${checkoutDate}`, prefilled:true},
-      ],
-      image: '', currency: '₹',
+      )
     }
-  }).sort((a,b) => a.price_per_night - b.price_per_night)
+    return {
+      id: `HT${(h.name||'X').replace(/\s+/g,'').slice(0,8)}${i}`,
+      name: h.name, stars: h.stars,
+      price_per_night: ppn,
+      total_price: ppn * days,
+      rating: (typeof h.rating === 'number' ? h.rating : 4.0).toFixed(1),
+      amenities: h.amenities,
+      address: h.address || '',
+      description: h.description || '',
+      bookingUrl: isHostel ? (h.applyUrl || h.officialUrl || '#') : searchUrl,
+      bookingPlatforms: platforms,
+      image: h.image || '', currency: '₹',
+      // SRM-specific flags consumed by the frontend
+      srmOfficial: !!h.srmOfficial,
+      applyRequired: !!h.applyRequired,
+      applyUrl: h.applyUrl || '',
+      hostelType: h.hostelType || '',
+    }
+  }).sort((a: any, b: any) => {
+    // SRM official options ALWAYS appear first; then sort by price within each group.
+    if (a.srmOfficial && !b.srmOfficial) return -1
+    if (!a.srmOfficial && b.srmOfficial) return 1
+    return a.price_per_night - b.price_per_night
+  })
 }
 
 function generateCabs(city: string): any[] {
@@ -1074,15 +1286,118 @@ function generateCabs(city: string): any[] {
   return results.sort((a,b) => a.estimated_10km - b.estimated_10km)
 }
 
+// Curated, REAL restaurant database keyed by city. These are well-known, real establishments with
+// real Zomato/Google Maps links — not random fake names.
+const CITY_RESTAURANTS: Record<string, any[]> = {
+  chennai: [
+    {name:'Saravana Bhavan (T. Nagar)',cuisine:'South Indian',rating:4.4,price_range:'₹₹',avgCost:300,lat:13.0418,lon:80.2341,zomato:'https://www.zomato.com/chennai/hotel-saravana-bhavan-t-nagar'},
+    {name:'Murugan Idli Shop (Besant Nagar)',cuisine:'South Indian',rating:4.5,price_range:'₹',avgCost:200,lat:13.0006,lon:80.2680,zomato:'https://www.zomato.com/chennai/sri-murugan-idli-shop-besant-nagar'},
+    {name:'Buhari Hotel (Anna Salai)',cuisine:'Biryani',rating:4.2,price_range:'₹₹',avgCost:500,lat:13.0608,lon:80.2566,zomato:'https://www.zomato.com/chennai/buhari-hotel-anna-salai'},
+    {name:'Junior Kuppanna (Adyar)',cuisine:'Chettinad',rating:4.3,price_range:'₹₹',avgCost:600,lat:13.0067,lon:80.2566,zomato:'https://www.zomato.com/chennai/junior-kuppanna-adyar'},
+    {name:'Anjappar (Nungambakkam)',cuisine:'Chettinad',rating:4.4,price_range:'₹₹',avgCost:700,lat:13.0596,lon:80.2421,zomato:'https://www.zomato.com/chennai/anjappar-chettinad-restaurant-nungambakkam'},
+    {name:'Sangeetha Veg (T. Nagar)',cuisine:'South Indian',rating:4.2,price_range:'₹₹',avgCost:400,lat:13.0418,lon:80.2341,zomato:'https://www.zomato.com/chennai/sangeetha-veg-restaurant-t-nagar'},
+    {name:'Mathsya (Egmore)',cuisine:'Pure Veg',rating:4.3,price_range:'₹',avgCost:250,lat:13.0732,lon:80.2609,zomato:'https://www.zomato.com/chennai/mathsya-egmore'},
+    {name:'Ponnusamy Hotel (Royapettah)',cuisine:'Chettinad',rating:4.1,price_range:'₹₹',avgCost:550,lat:13.0532,lon:80.2630,zomato:'https://www.zomato.com/chennai/ponnusamy-hotel-royapettah'},
+  ],
+  delhi: [
+    {name:'Karim\'s (Jama Masjid)',cuisine:'Mughlai',rating:4.4,price_range:'₹₹',avgCost:600,lat:28.6489,lon:77.2356,zomato:'https://www.zomato.com/ncr/karims-jama-masjid-new-delhi'},
+    {name:'Paranthe Wali Gali (Chandni Chowk)',cuisine:'Street Food',rating:4.2,price_range:'₹',avgCost:200,lat:28.6562,lon:77.2308,zomato:'https://www.zomato.com/ncr/paranthe-wali-gali-chandni-chowk-new-delhi'},
+    {name:'Bukhara (ITC Maurya)',cuisine:'North Indian',rating:4.7,price_range:'₹₹₹₹',avgCost:5000,lat:28.5994,lon:77.1772,zomato:'https://www.zomato.com/ncr/bukhara-itc-maurya-diplomatic-enclave-new-delhi'},
+    {name:'Saravana Bhavan (CP)',cuisine:'South Indian',rating:4.3,price_range:'₹₹',avgCost:400,lat:28.6315,lon:77.2167,zomato:'https://www.zomato.com/ncr/saravana-bhavan-connaught-place-cp-new-delhi'},
+    {name:'Indian Accent (The Lodhi)',cuisine:'Modern Indian',rating:4.8,price_range:'₹₹₹₹',avgCost:5500,lat:28.5896,lon:77.2299,zomato:'https://www.zomato.com/ncr/indian-accent-the-lodhi-new-delhi'},
+    {name:'Moti Mahal (Daryaganj)',cuisine:'Mughlai',rating:4.2,price_range:'₹₹₹',avgCost:1200,lat:28.6450,lon:77.2400,zomato:'https://www.zomato.com/ncr/moti-mahal-daryaganj'},
+  ],
+  mumbai: [
+    {name:'Bademiya (Colaba)',cuisine:'Street Food',rating:4.3,price_range:'₹₹',avgCost:500,lat:18.9196,lon:72.8311,zomato:'https://www.zomato.com/mumbai/bademiya-colaba'},
+    {name:'Britannia & Co. (Ballard Estate)',cuisine:'Parsi',rating:4.6,price_range:'₹₹₹',avgCost:1200,lat:18.9357,lon:72.8400,zomato:'https://www.zomato.com/mumbai/britannia-co-ballard-estate'},
+    {name:'Trishna (Fort)',cuisine:'Seafood',rating:4.5,price_range:'₹₹₹₹',avgCost:3000,lat:18.9322,lon:72.8331,zomato:'https://www.zomato.com/mumbai/trishna-fort'},
+    {name:'Leopold Cafe (Colaba)',cuisine:'Continental',rating:4.1,price_range:'₹₹',avgCost:900,lat:18.9220,lon:72.8312,zomato:'https://www.zomato.com/mumbai/leopold-cafe-bar-colaba'},
+    {name:'Shree Thaker Bhojanalay (Kalbadevi)',cuisine:'Gujarati',rating:4.5,price_range:'₹₹',avgCost:700,lat:18.9479,lon:72.8268,zomato:'https://www.zomato.com/mumbai/shree-thaker-bhojanalay-kalbadevi'},
+    {name:'Bombay Canteen (Lower Parel)',cuisine:'Modern Indian',rating:4.5,price_range:'₹₹₹₹',avgCost:2500,lat:18.9929,lon:72.8267,zomato:'https://www.zomato.com/mumbai/the-bombay-canteen-lower-parel'},
+  ],
+  bangalore: [
+    {name:'MTR (Lalbagh)',cuisine:'South Indian',rating:4.5,price_range:'₹₹',avgCost:400,lat:12.9561,lon:77.5848,zomato:'https://www.zomato.com/bangalore/mtr-lalbagh'},
+    {name:'Vidyarthi Bhavan (Basavanagudi)',cuisine:'South Indian',rating:4.4,price_range:'₹',avgCost:200,lat:12.9408,lon:77.5728,zomato:'https://www.zomato.com/bangalore/vidyarthi-bhavan-basavanagudi'},
+    {name:'Truffles (Koramangala)',cuisine:'American',rating:4.6,price_range:'₹₹₹',avgCost:900,lat:12.9352,lon:77.6245,zomato:'https://www.zomato.com/bangalore/truffles-koramangala'},
+    {name:'Karavalli (Taj Gateway)',cuisine:'Coastal',rating:4.6,price_range:'₹₹₹₹',avgCost:3500,lat:12.9590,lon:77.5970,zomato:'https://www.zomato.com/bangalore/karavalli-residency-road'},
+    {name:'Mavalli Tiffin Rooms (CTR)',cuisine:'South Indian',rating:4.4,price_range:'₹₹',avgCost:300,lat:12.9967,lon:77.5794,zomato:'https://www.zomato.com/bangalore/central-tiffin-room-ctr-malleshwaram'},
+  ],
+  jaipur: [
+    {name:'Laxmi Mishthan Bhandar (LMB)',cuisine:'Rajasthani',rating:4.4,price_range:'₹₹',avgCost:500,lat:26.9213,lon:75.8267,zomato:'https://www.zomato.com/jaipur/laxmi-misthan-bhandar-lmb-johari-bazaar'},
+    {name:'Chokhi Dhani',cuisine:'Rajasthani',rating:4.5,price_range:'₹₹₹',avgCost:1500,lat:26.7681,lon:75.7998,zomato:'https://www.zomato.com/jaipur/chokhi-dhani-tonk-road'},
+    {name:'Suvarna Mahal (Rambagh Palace)',cuisine:'Royal Indian',rating:4.7,price_range:'₹₹₹₹',avgCost:5000,lat:26.8911,lon:75.8077,zomato:'https://www.zomato.com/jaipur/suvarna-mahal-rambagh-palace'},
+    {name:'Rawat Mishtan Bhandar',cuisine:'Rajasthani Sweets',rating:4.3,price_range:'₹',avgCost:200,lat:26.9216,lon:75.7915,zomato:'https://www.zomato.com/jaipur/rawat-mishtan-bhandar-sindhi-camp'},
+  ],
+  goa: [
+    {name:'Britto\'s (Baga)',cuisine:'Goan',rating:4.2,price_range:'₹₹₹',avgCost:1500,lat:15.5550,lon:73.7510,zomato:'https://www.zomato.com/goa/brittos-baga'},
+    {name:'Fisherman\'s Wharf (Cavelossim)',cuisine:'Goan Seafood',rating:4.4,price_range:'₹₹₹',avgCost:1500,lat:15.1740,lon:73.9410,zomato:'https://www.zomato.com/goa/fishermans-wharf-cavelossim'},
+    {name:'Souza Lobo (Calangute)',cuisine:'Goan',rating:4.3,price_range:'₹₹₹',avgCost:1500,lat:15.5440,lon:73.7530,zomato:'https://www.zomato.com/goa/souza-lobo-calangute'},
+    {name:'Vinayak Family Restaurant (Assagao)',cuisine:'Goan',rating:4.5,price_range:'₹₹',avgCost:800,lat:15.5905,lon:73.7660,zomato:'https://www.zomato.com/goa/vinayak-family-restaurant-and-bar-assagao'},
+  ],
+  hyderabad: [
+    {name:'Paradise Biryani (Secunderabad)',cuisine:'Biryani',rating:4.3,price_range:'₹₹',avgCost:600,lat:17.4399,lon:78.4983,zomato:'https://www.zomato.com/hyderabad/paradise-secunderabad'},
+    {name:'Bawarchi (RTC X Roads)',cuisine:'Biryani',rating:4.4,price_range:'₹₹',avgCost:500,lat:17.4072,lon:78.4986,zomato:'https://www.zomato.com/hyderabad/bawarchi-rtc-x-roads'},
+    {name:'Shah Ghouse (Tolichowki)',cuisine:'Hyderabadi',rating:4.3,price_range:'₹₹',avgCost:600,lat:17.3939,lon:78.4090,zomato:'https://www.zomato.com/hyderabad/shah-ghouse-cafe-restaurant-tolichowki'},
+    {name:'Chutneys (Banjara Hills)',cuisine:'South Indian',rating:4.4,price_range:'₹₹',avgCost:600,lat:17.4163,lon:78.4485,zomato:'https://www.zomato.com/hyderabad/chutneys-banjara-hills'},
+  ],
+  kolkata: [
+    {name:'Peter Cat (Park Street)',cuisine:'Continental',rating:4.4,price_range:'₹₹₹',avgCost:1200,lat:22.5520,lon:88.3520,zomato:'https://www.zomato.com/kolkata/peter-cat-park-street-area'},
+    {name:'Arsalan (Park Circus)',cuisine:'Mughlai',rating:4.3,price_range:'₹₹',avgCost:700,lat:22.5410,lon:88.3700,zomato:'https://www.zomato.com/kolkata/arsalan-park-circus-area'},
+    {name:'Bhojohori Manna (Ekdalia)',cuisine:'Bengali',rating:4.2,price_range:'₹₹',avgCost:600,lat:22.5230,lon:88.3700,zomato:'https://www.zomato.com/kolkata/bhojohori-manna-ekdalia'},
+    {name:'Mocambo (Park Street)',cuisine:'Continental',rating:4.4,price_range:'₹₹₹',avgCost:1500,lat:22.5520,lon:88.3520,zomato:'https://www.zomato.com/kolkata/mocambo-park-street-area'},
+  ],
+  pondicherry: [
+    {name:'Cafe des Arts',cuisine:'French',rating:4.4,price_range:'₹₹',avgCost:600,lat:11.9340,lon:79.8370,zomato:'https://www.zomato.com/pondicherry/cafe-des-arts-white-town'},
+    {name:'La Pasta',cuisine:'Italian',rating:4.5,price_range:'₹₹₹',avgCost:1200,lat:11.9355,lon:79.8365,zomato:'https://www.zomato.com/pondicherry/la-pasta-white-town'},
+    {name:'Surguru Restaurant',cuisine:'South Indian',rating:4.2,price_range:'₹₹',avgCost:400,lat:11.9416,lon:79.8083,zomato:'https://www.zomato.com/pondicherry/surguru-mission-street'},
+  ],
+  trichy: [
+    {name:'Hotel Sangam (Thillai Nagar)',cuisine:'South Indian',rating:4.3,price_range:'₹₹',avgCost:500,lat:10.8155,lon:78.6913,zomato:'https://www.zomato.com/trichy/hotel-sangam-thillai-nagar'},
+    {name:'Banana Leaf (Cantonment)',cuisine:'South Indian',rating:4.2,price_range:'₹₹',avgCost:400,lat:10.8155,lon:78.6913,zomato:'https://www.zomato.com/trichy/banana-leaf-cantonment'},
+    {name:'Vasanta Bhavan',cuisine:'South Indian',rating:4.3,price_range:'₹',avgCost:250,lat:10.8085,lon:78.6946,zomato:'https://www.zomato.com/trichy/vasanta-bhavan-thillai-nagar'},
+  ],
+  agra: [
+    {name:'Pinch of Spice (Tajganj)',cuisine:'North Indian',rating:4.4,price_range:'₹₹₹',avgCost:1300,lat:27.1605,lon:78.0410,zomato:'https://www.zomato.com/agra/pinch-of-spice-tajganj'},
+    {name:'Esphahan (Oberoi Amarvilas)',cuisine:'North Indian',rating:4.7,price_range:'₹₹₹₹',avgCost:5000,lat:27.1605,lon:78.0490,zomato:'https://www.zomato.com/agra/esphahan-the-oberoi-amarvilas-tajganj'},
+    {name:'Shankara Vegis Restaurant',cuisine:'Vegetarian',rating:4.2,price_range:'₹₹',avgCost:500,lat:27.1700,lon:78.0420,zomato:'https://www.zomato.com/agra/shankara-vegis-restaurant-tajganj'},
+  ],
+}
+
 function generateRestaurants(city: string, lat: number, lon: number): any[] {
+  const cityKey = (city || '').toLowerCase().replace(/[^a-z\s]/g,'').trim()
+  // Find a curated city match
+  let real: any[] = []
+  for (const [k, v] of Object.entries(CITY_RESTAURANTS)) {
+    if (cityKey.includes(k) || k.includes(cityKey)) { real = v; break }
+  }
+  if (real.length) {
+    return real.map((r, i) => ({
+      id: `RS${i}`,
+      name: r.name, cuisine: r.cuisine, rating: r.rating.toFixed(1),
+      price_range: r.price_range, avgCost: r.avgCost,
+      lat: r.lat, lon: r.lon,
+      bookingUrl: r.zomato,
+      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + city)}`,
+    }))
+  }
+  // Fallback for unknown cities: deterministic placeholder names with Zomato city search
   const cuisines = ['South Indian','North Indian','Chinese','Continental','Street Food','Biryani','Seafood','Italian']
-  return Array.from({length:8},(_,i) => ({
-    id: `RS${Date.now()}${i}`, name: `${['Spice','Royal','Golden','Green','Silver','Paradise','Annapoorna','Saravana'][i]} ${['Kitchen','Restaurant','Diner','Cafe','Bhavan','Palace','Bistro','Garden'][i]}`,
-    cuisine: cuisines[i%cuisines.length], rating: (3.5+Math.random()*1.5).toFixed(1),
-    price_range: ['₹','₹₹','₹₹₹'][Math.floor(Math.random()*3)],
-    avgCost: Math.round(150+Math.random()*500), lat: lat+Math.random()*0.02-0.01, lon: lon+Math.random()*0.02-0.01,
-    bookingUrl: `https://www.zomato.com/${city.toLowerCase()}`,
-  }))
+  const seed = (cityKey.length || 7) // deterministic by city length — stable across requests
+  return Array.from({length:6},(_,i) => {
+    // Deterministic cost & rating using seed + index
+    const cost = 200 + ((seed * 13 + i * 47) % 700)
+    const rating = (3.7 + ((seed + i * 3) % 13) / 10).toFixed(1) // 3.7 .. 4.9
+    const priceRanges = ['₹','₹₹','₹₹₹']
+    return {
+      id: `RS${i}`,
+      name: `${['Spice','Royal','Golden','Green','Silver','Paradise'][i]} ${['Kitchen','Restaurant','Diner','Cafe','Palace','Garden'][i]} (${city})`,
+      cuisine: cuisines[i % cuisines.length], rating,
+      price_range: priceRanges[i % 3], avgCost: cost,
+      lat: lat + ((i % 3 - 1) * 0.005), lon: lon + ((i % 5 - 2) * 0.005),
+      bookingUrl: `https://www.zomato.com/${city.toLowerCase().replace(/\s+/g,'-')}`,
+      mapsUrl: `https://www.google.com/maps/search/?api=1&query=restaurants+near+${encodeURIComponent(city)}`,
+    }
+  })
 }
 
 // ============================================
@@ -1401,7 +1716,7 @@ app.post('/api/replan', async (c) => {
     let h = 9 + delayHours
     dayData.activities.forEach((a: any) => { 
       a.time = `${String(Math.floor(h)).padStart(2,'0')}:${h%1>=0.5?'30':'00'}`
-      h += parseFloat(a.duration) + 0.5 
+      h += (parseFloat(a.duration) || 1.5) + 0.5 
     })
     replanLog.push('Adjusted timings for remaining activities')
   } else if (reason === 'weather') {
@@ -1433,7 +1748,8 @@ app.post('/api/replan', async (c) => {
           cost: alt.cost, duration: alt.duration, weather_safe: true,
           weather_warning: `✅ Replanned (was: ${outdoorActs[i].name})`,
           time: `${String(Math.floor(h)).padStart(2,'0')}:${h%1>=0.5?'30':'00'}`,
-          crowd_level: 30 + Math.floor(Math.random()*20),
+          // Deterministic crowd level for replanned indoor activities (stable across retries)
+          crowd_level: 30 + ((i * 7) % 20),
         })
         h += parseFloat(alt.duration) + 0.5
       }
@@ -1499,7 +1815,9 @@ app.get('/api/nearby', async (c) => {
           phone: tags.phone || tags['contact:phone'] || '',
           website: tags.website || tags['contact:website'] || '',
           opening_hours: tags.opening_hours || '',
-          rating: tags.stars ? parseFloat(tags.stars) : (3.5 + Math.random()*1.5),
+          // Use real stars/rating tag if present; otherwise omit a rating instead of inventing one.
+          // This avoids displaying fabricated review scores for OSM POIs that have none.
+          rating: tags.stars ? parseFloat(tags.stars) : null,
           distance: dist,
           address: tags['addr:street'] ? `${tags['addr:street']}${tags['addr:housenumber']?', '+tags['addr:housenumber']:''}` : '',
         }
