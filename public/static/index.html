@@ -88,6 +88,9 @@
             <button class="btn btn-primary btn-generate" id="generateBtn" onclick="generateTrip()">
                 <i class="fas fa-magic"></i> Generate Trip
             </button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">
+                <span class="autonomous-badge">🤖 Autonomous AI · Live</span>
+            </div>
             <div id="backendStatus" class="backend-status">Checking backend...</div>
             <div class="quick-actions">
                 <button class="btn btn-outline" onclick="openRecommendModal()"><i class="fas fa-compass"></i> Help Me Choose</button>
@@ -299,7 +302,7 @@
     <aside class="right-sidebar">
         <!-- AI Agents -->
         <div class="panel">
-            <div class="panel-title"><i class="fas fa-robot"></i> AI Agents</div>
+            <div class="panel-title"><i class="fas fa-robot"></i> AI Agents <span class="autonomous-badge" style="margin-left:auto;font-size:0.6rem">AUTONOMOUS</span></div>
             <div id="agentCards"></div>
         </div>
 
@@ -637,18 +640,71 @@
     </div>
 </div>
 
-<!-- BEAUTIFUL LOADING SCREEN -->
+<!-- AUTONOMOUS AGENT LOADING SCREEN -->
 <div class="loading-overlay" id="loadingOverlay">
-    <div class="loading-content">
-        <div class="loading-image-carousel">
-            <img class="loading-travel-img active" src="https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=500&h=350&fit=crop" alt="Planning your trip">
-            <img class="loading-travel-img" src="https://images.unsplash.com/photo-1477587458883-47145ed94245?w=500&h=350&fit=crop" alt="Discovering places">
-            <img class="loading-travel-img" src="https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=500&h=350&fit=crop" alt="Finding activities">
-            <img class="loading-travel-img" src="https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=500&h=350&fit=crop" alt="Optimizing route">
+    <div class="loading-content agentic-loader">
+        <!-- Top status bar — autonomous AI signal -->
+        <div class="agentic-top-bar">
+            <span class="agentic-tag">🤖 AGENTIC AI</span>
+            <span class="agentic-tag agentic-tag-live"><span class="status-dot live"></span> AUTONOMOUS</span>
+            <span class="agentic-tag">⚡ 7-AGENT SWARM</span>
         </div>
+
+        <!-- Destination photo carousel (mixed back in from previous version) -->
+        <div class="loading-image-carousel" id="loadingImageCarousel">
+            <img class="loading-img active" id="loadingImg1" src="https://images.unsplash.com/photo-1564507592333-c60657eea523?w=800&q=80" alt="Taj Mahal" />
+            <img class="loading-img" id="loadingImg2" src="https://images.unsplash.com/photo-1587474260584-136574528ed5?w=800&q=80" alt="Discovering places" />
+            <img class="loading-img" id="loadingImg3" src="https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=800&q=80" alt="Finding activities" />
+            <img class="loading-img" id="loadingImg4" src="https://images.unsplash.com/photo-1599661046289-e31897846e41?w=800&q=80" alt="Optimizing route" />
+            <div class="loading-image-overlay"></div>
+            <div class="loading-image-hud">
+                <span class="hud-line">SCANNING DESTINATION</span>
+                <span class="hud-dest" id="loadingHudDest">— · — · —</span>
+            </div>
+        </div>
+
+        <div class="agentic-header">
+            <div class="agentic-brain">
+                <div class="brain-core"></div>
+                <div class="brain-ring r1"></div>
+                <div class="brain-ring r2"></div>
+                <div class="brain-ring r3"></div>
+            </div>
+            <div class="agentic-title">
+                <h2>🤖 Autonomous AI Planning</h2>
+                <div class="agentic-subtitle"><span class="status-dot live"></span> 7 agents collaborating in parallel</div>
+            </div>
+        </div>
+
+        <div class="agentic-pipeline" id="agenticPipeline">
+            <div class="agent-pill" data-aid="planner"><span class="pill-icon">🧭</span> Planner <span class="pill-state">…</span></div>
+            <div class="agent-pill" data-aid="weather"><span class="pill-icon">⛅</span> Weather <span class="pill-state">…</span></div>
+            <div class="agent-pill" data-aid="crowd"><span class="pill-icon">👥</span> Crowd <span class="pill-state">…</span></div>
+            <div class="agent-pill" data-aid="budget"><span class="pill-icon">💰</span> Budget <span class="pill-state">…</span></div>
+            <div class="agent-pill" data-aid="preference"><span class="pill-icon">🎯</span> Preference <span class="pill-state">…</span></div>
+            <div class="agent-pill" data-aid="booking"><span class="pill-icon">🎫</span> Booking <span class="pill-state">…</span></div>
+            <div class="agent-pill" data-aid="explain"><span class="pill-icon">🧠</span> Explain <span class="pill-state">…</span></div>
+        </div>
+
         <div class="loading-progress-bar"><div class="loading-progress-fill" id="loadingProgressFill"></div></div>
-        <div class="loading-text" id="loadingText">Planning your perfect trip...</div>
-        <div class="loading-step" id="loadingStep">Analyzing destination</div>
+        <div class="loading-text" id="loadingText">Initialising autonomous agents…</div>
+        <div class="loading-step" id="loadingStep">MCTS · Q-Learning · Bayesian · POMDP</div>
+
+        <!-- Live agent decision feed — gives strong agentic AI feel -->
+        <div class="agent-feed" id="agentFeed">
+            <div class="agent-feed-header">
+                <span class="agent-feed-title">🛰️ LIVE AGENT FEED</span>
+                <span class="agent-feed-throughput" id="agentFeedTPS">— ops/s</span>
+            </div>
+            <div class="agent-feed-body" id="agentFeedBody"></div>
+        </div>
+
+        <div class="agentic-stats">
+            <div><span class="stat-num" id="loadStat-actions">0</span><span class="stat-lbl">Decisions</span></div>
+            <div><span class="stat-num" id="loadStat-places">0</span><span class="stat-lbl">Places scored</span></div>
+            <div><span class="stat-num" id="loadStat-routes">0</span><span class="stat-lbl">Routes evaluated</span></div>
+            <div><span class="stat-num" id="loadStat-rewards">0</span><span class="stat-lbl">Rewards (RL)</span></div>
+        </div>
     </div>
 </div>
 

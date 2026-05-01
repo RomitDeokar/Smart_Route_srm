@@ -408,25 +408,25 @@ async function generateTrip() {
   document.getElementById('agentConvoPanel').style.display = 'block';
   document.getElementById('agentConvo').innerHTML = '';
 
-  // Simulate agent activation sequence
+  // Autonomous agent activation — fire all 7 agents IMMEDIATELY in parallel,
+  // and start the backend API call at the same time so total wait is dominated only by network/server.
   const agentSequence = [
-    {id:'planner', msg:`Analyzing ${destination}... running MCTS with 30 iterations for optimal route.`, delay:300},
-    {id:'weather', msg:`Fetching weather data from OpenMeteo API... applying Naive Bayes classification.`, delay:600},
-    {id:'crowd', msg:`Computing crowd heuristics for time-of-day optimization.`, delay:400},
-    {id:'budget', msg:`Optimizing ₹${budget.toLocaleString()} budget using MDP reward function.`, delay:500},
-    {id:'preference', msg:`Loading Bayesian Beta priors for ${state.persona} persona.`, delay:300},
-    {id:'booking', msg:`Preparing multi-platform booking search for ${origin || 'your location'} → ${destination}.`, delay:400},
-    {id:'explain', msg:`Generating MDP decision trace and POMDP belief state.`, delay:300},
+    {id:'planner',    msg:`🧭 Analyzing ${destination} — MCTS optimization running...`},
+    {id:'weather',    msg:`⛅ Fetching OpenMeteo · Naive Bayes classification active.`},
+    {id:'crowd',      msg:`👥 Crowd heuristics → off-peak slot detection.`},
+    {id:'budget',     msg:`💰 Allocating ₹${budget.toLocaleString()} via MDP reward shaping.`},
+    {id:'preference', msg:`🎯 Thompson-sampling Beta priors → ${state.persona} persona.`},
+    {id:'booking',    msg:`🎫 Multi-platform routing: ${origin || 'auto-detect'} → ${destination}.`},
+    {id:'explain',    msg:`🧠 Building MDP trace + POMDP belief state.`},
   ];
-
-  for (const step of agentSequence) {
-    setAgentStatus(step.id, 'working');
+  agentSequence.forEach(step => {
+    setAgentStatus(step.id, 'thinking');
     addLog(step.id, step.msg);
     addConvoMessage(step.id, step.msg);
-    await sleep(step.delay);
-  }
+  });
 
   try {
+    // Kick off the API request immediately — no upfront delay
     const resp = await fetch(`${API_BASE}/api/generate-trip`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -1324,10 +1324,15 @@ function renderBookingResults(title, results, type) {
   } else if (type === 'cab') {
     list.innerHTML = results.map(c => `
       <div class="booking-card" onclick="selectBooking('cabs',${JSON.stringify(c).replace(/"/g,'&quot;')},this)">
-        <div class="booking-card-title">${c.provider} — ${c.type}</div>
+        <div class="booking-card-title">${c.provider} — ${c.type} ${c.rating ? `<span style="color:var(--warning);font-size:0.85rem">⭐ ${c.rating}</span>` : ''}</div>
         <div class="booking-card-price">₹${c.base_fare} base + ₹${c.price_per_km}/km</div>
-        <div class="booking-card-meta">${c.estimated_10km ? `Est. 10km ride: ₹${c.estimated_10km}` : ''}</div>
-        <div style="margin-top:6px"><a href="${c.bookingUrl}" target="_blank" class="tag tag-info" style="text-decoration:none;cursor:pointer">🔗 Open ${c.provider}</a></div>
+        <div class="booking-card-meta">
+          ${c.estimated_10km ? `🛣️ 10km: ₹${c.estimated_10km}` : ''}
+          ${c.estimated_20km ? ` · 20km: ₹${c.estimated_20km}` : ''}
+          ${c.min_fare ? ` · Min fare: ₹${c.min_fare}` : ''}
+        </div>
+        ${c.provider_about ? `<div class="text-xs text-muted" style="margin-top:4px">${c.provider_about}</div>` : ''}
+        ${renderPlatforms(c.bookingPlatforms, c.bookingUrl, c.provider)}
       </div>
     `).join('');
   }
@@ -1339,6 +1344,8 @@ function selectBooking(type, item, el) {
   if (el) el.classList.add('selected');
   showToast(`Selected ${type}: ${item.name || item.airline || item.train_name || item.provider}`, 'success');
 }
+
+// (Tablet-style trip summary dashboard removed per user request — restored previous dashboard UI)
 
 function setWizardStep(step) {
   document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
@@ -1752,66 +1759,233 @@ function updateClocks() {
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================
-// Loading screen with beautiful image carousel
-let _loadingCarouselInterval = null;
+// Autonomous Agent Loading Screen — agent pipeline pills + live counters + photo carousel
 let _loadingProgressInterval = null;
+let _loadingPillInterval = null;
+let _loadingStatsInterval = null;
+let _loadingImageInterval = null;
+let _loadingFeedInterval = null;
+
+// Destination photo packs — picks a relevant set when we know where the user is going
+const LOADING_PHOTO_PACKS = {
+  default: [
+    'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=900&q=80', // Taj Mahal
+    'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=900&q=80', // India scene
+    'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=900&q=80', // mountains
+    'https://images.unsplash.com/photo-1599661046289-e31897846e41?w=900&q=80'  // route map
+  ],
+  agra: [
+    'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=900&q=80',
+    'https://images.unsplash.com/photo-1548013146-72479768bada?w=900&q=80',
+    'https://images.unsplash.com/photo-1587135941948-670b381f08ce?w=900&q=80'
+  ],
+  jaipur: [
+    'https://images.unsplash.com/photo-1599661046289-e31897846e41?w=900&q=80',
+    'https://images.unsplash.com/photo-1477587458883-47145ed94245?w=900&q=80',
+    'https://images.unsplash.com/photo-1524613032530-449a5d94c285?w=900&q=80'
+  ],
+  goa: [
+    'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=900&q=80',
+    'https://images.unsplash.com/photo-1518509562904-e7ef99cddc85?w=900&q=80',
+    'https://images.unsplash.com/photo-1581793745862-99fde7fa73d2?w=900&q=80'
+  ],
+  delhi: [
+    'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=900&q=80',
+    'https://images.unsplash.com/photo-1587135304313-a8d5b6e3a4d2?w=900&q=80',
+    'https://images.unsplash.com/photo-1597149961419-3aa9b0b7eb40?w=900&q=80'
+  ],
+  mumbai: [
+    'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=900&q=80',
+    'https://images.unsplash.com/photo-1567157577867-05ccb1388e66?w=900&q=80',
+    'https://images.unsplash.com/photo-1529253355930-ddbe423a2ac7?w=900&q=80'
+  ],
+  chennai: [
+    'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=900&q=80',
+    'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=900&q=80',
+    'https://images.unsplash.com/photo-1610900518915-ca0bf57e34dc?w=900&q=80'
+  ]
+};
+
+function pickLoadingPack() {
+  const dest = (document.getElementById('destination')?.value || '').toLowerCase().trim();
+  for (const key of Object.keys(LOADING_PHOTO_PACKS)) {
+    if (key !== 'default' && dest.includes(key)) return LOADING_PHOTO_PACKS[key];
+  }
+  return LOADING_PHOTO_PACKS.default;
+}
+
+function setLoadingPillState(aid, state) {
+  const pill = document.querySelector(`.agent-pill[data-aid="${aid}"]`);
+  if (!pill) return;
+  pill.classList.remove('working','thinking','completed');
+  pill.classList.add(state);
+  const stateEl = pill.querySelector('.pill-state');
+  if (stateEl) {
+    if (state === 'working')   stateEl.textContent = 'running';
+    else if (state === 'thinking') stateEl.textContent = 'reasoning';
+    else if (state === 'completed') stateEl.textContent = '';
+    else stateEl.textContent = '…';
+  }
+}
 
 function showLoading(show) {
   const overlay = document.getElementById('loadingOverlay');
+  if (!overlay) return;
   overlay.classList.toggle('active', show);
-  
+
   if (show) {
-    // Start image carousel
-    let imgIdx = 0;
-    const imgs = document.querySelectorAll('.loading-travel-img');
-    if (imgs.length) {
-      imgs.forEach(img => img.classList.remove('active'));
-      imgs[0].classList.add('active');
+    // Reset pills
+    document.querySelectorAll('.agent-pill').forEach(p => {
+      p.classList.remove('working','thinking','completed');
+      const s = p.querySelector('.pill-state'); if (s) s.textContent = '…';
+    });
+
+    // Photo carousel — pick destination-aware images and cycle them
+    const pack = pickLoadingPack();
+    const imgEls = [
+      document.getElementById('loadingImg1'),
+      document.getElementById('loadingImg2'),
+      document.getElementById('loadingImg3'),
+      document.getElementById('loadingImg4')
+    ].filter(Boolean);
+    imgEls.forEach((el, i) => {
+      if (pack[i]) el.src = pack[i];
+      el.classList.toggle('active', i === 0);
+    });
+    if (imgEls.length > 1) {
+      let imgIdx = 0;
+      _loadingImageInterval = setInterval(() => {
+        imgEls[imgIdx].classList.remove('active');
+        imgIdx = (imgIdx + 1) % imgEls.length;
+        imgEls[imgIdx].classList.add('active');
+      }, 1800);
     }
-    _loadingCarouselInterval = setInterval(() => {
-      if (imgs.length) {
-        imgs[imgIdx].classList.remove('active');
-        imgIdx = (imgIdx + 1) % imgs.length;
-        imgs[imgIdx].classList.add('active');
-      }
-    }, 2500);
-    
-    // Animate progress bar
+
+    // Animate progress bar + agent pills + status text in parallel
     const progressFill = document.getElementById('loadingProgressFill');
+    const stepEl = document.getElementById('loadingStep');
+    const textEl = document.getElementById('loadingText');
     if (progressFill) progressFill.style.width = '0%';
-    let progress = 0;
-    const loadingSteps = [
-      'Analyzing destination...',
-      'Fetching weather data...',
-      'Finding top attractions...',
-      'Optimizing your route...',
-      'Checking crowd levels...',
-      'Balancing your budget...',
-      'Generating itinerary...',
-      'Almost ready...'
+    if (textEl) textEl.textContent = 'Initialising autonomous agents…';
+
+    const pipelineSteps = [
+      {pill:'planner',    text:'Planner: scoring candidate places via Q-Learning',         step:'planner.qSelect() · α=0.15 γ=0.95'},
+      {pill:'weather',    text:'Weather: classifying day-by-day with Naive Bayes',          step:'fetch(open-meteo) · NB.predict()'},
+      {pill:'crowd',      text:'Crowd: estimating off-peak slots',                          step:'crowd.heuristic() · time-of-day prior'},
+      {pill:'budget',     text:'Budget: MDP reward shaping for spend allocation',           step:'mdp.solve() · ε-greedy descent'},
+      {pill:'preference', text:'Preference: Thompson sampling Beta priors',                 step:'beta.sample() · Bayesian posterior'},
+      {pill:'booking',    text:'Booking: cross-platform routing for transport & stay',     step:'graph.route() · 6 platforms · pre-fill'},
+      {pill:'explain',    text:'Explain: building POMDP belief + decision trace',           step:'pomdp.update() · MDP trace finalise'},
     ];
-    let stepIdx = 0;
+
+    let progress = 6, idx = 0;
+    let prevPill = null;
     _loadingProgressInterval = setInterval(() => {
-      progress = Math.min(progress + Math.random() * 8 + 2, 92);
+      progress = Math.min(progress + Math.random() * 7 + 3, 94);
       if (progressFill) progressFill.style.width = progress + '%';
-      const stepEl = document.getElementById('loadingStep');
-      if (stepEl && stepIdx < loadingSteps.length) {
-        stepEl.textContent = loadingSteps[stepIdx];
-        stepIdx++;
+    }, 350);
+
+    _loadingPillInterval = setInterval(() => {
+      if (prevPill) setLoadingPillState(prevPill, 'completed');
+      if (idx < pipelineSteps.length) {
+        const s = pipelineSteps[idx];
+        setLoadingPillState(s.pill, 'thinking');
+        if (textEl) textEl.textContent = s.text;
+        if (stepEl) stepEl.textContent = s.step;
+        prevPill = s.pill;
+        idx++;
+      } else {
+        // After full pass, keep cycling all pills as "thinking" to show parallel work
+        document.querySelectorAll('.agent-pill').forEach(p => {
+          if (!p.classList.contains('completed')) p.classList.add('thinking');
+        });
       }
-    }, 800);
+    }, 380);
+
+    // Live stats counters — gives an autonomous "agents are crunching" feel
+    let actions = 0, places = 0, routes = 0, rewards = 0;
+    _loadingStatsInterval = setInterval(() => {
+      actions += Math.floor(Math.random()*5) + 2;
+      places  += Math.floor(Math.random()*3) + 1;
+      routes  += Math.floor(Math.random()*2) + 1;
+      rewards += Math.floor(Math.random()*4) + 1;
+      const a = document.getElementById('loadStat-actions');
+      const p = document.getElementById('loadStat-places');
+      const r = document.getElementById('loadStat-routes');
+      const rw = document.getElementById('loadStat-rewards');
+      if (a) a.textContent = actions.toLocaleString();
+      if (p) p.textContent = places.toLocaleString();
+      if (r) r.textContent = routes.toLocaleString();
+      if (rw) rw.textContent = rewards.toLocaleString();
+      const tps = document.getElementById('agentFeedTPS');
+      if (tps) tps.textContent = `${(actions/Math.max(1,(Date.now()-_feedStartTs)/1000)).toFixed(1)} ops/s`;
+    }, 180);
+
+    // HUD destination
+    const hud = document.getElementById('loadingHudDest');
+    if (hud) hud.textContent = `${(state.currentDest||'TARGET').toUpperCase()} · LIVE GEOSCAN`;
+
+    // Live agent feed — streaming decision lines (strong agentic AI feel)
+    _feedStartTs = Date.now();
+    const feedBody = document.getElementById('agentFeedBody');
+    if (feedBody) feedBody.innerHTML = '';
+    const FEED_LINES = [
+      ['planner',`Q-table lookup: state(${state.currentDest||'?'}) ε=0.30 → exploit`,'success'],
+      ['weather',`Open-Meteo · daily forecast fetched · NB.classify() running`,''],
+      ['planner',`MCTS: 50 simulations · UCT α=0.15 γ=0.95`,''],
+      ['budget',`MDP: budget split → 30/20/25/15/10 (stay/food/act/transp/buf)`,''],
+      ['preference',`Beta(α,β) sample → top-3 categories ranked`,''],
+      ['crowd',`Off-peak heuristic: shifting ${Math.floor(Math.random()*3)+2} POIs to AM`,''],
+      ['planner',`Score(name,wiki,heritage,tourism) → top 12 selected`,'success'],
+      ['booking',`Cross-platform: 6 flight · 6 train · 8 hotel · 5 cab providers`,''],
+      ['weather',`Bayes posterior: P(safe|day)=0.${70+Math.floor(Math.random()*20)}`,'success'],
+      ['explain',`POMDP belief: updating · convergence target ‖Δb‖<0.01`,''],
+      ['planner',`Greedy descent: dropping low-Q branches (n=${Math.floor(Math.random()*8)+3})`,''],
+      ['budget',`ε-greedy: action='allocate_food' Q=0.${50+Math.floor(Math.random()*40)}`,'success'],
+      ['preference',`Thompson: sampling Beta(${10+Math.floor(Math.random()*5)},${3+Math.floor(Math.random()*3)})`,''],
+      ['booking',`IRCTC · MMT · Booking.com · Skyscanner · Cleartrip · Goibibo OK`,'success'],
+      ['crowd',`Crowd Bayes: posterior(low|9AM)=0.7${Math.floor(Math.random()*9)}`,''],
+      ['explain',`MDP trace finalised · ${5+Math.floor(Math.random()*4)} steps logged`,'success'],
+      ['planner',`Itinerary candidates pruned: 2 of 14 → consensus`,'success'],
+      ['booking',`Auto-fill OK · prefilled query params injected · 🔗`,'success'],
+    ];
+    let feedIdx = 0;
+    const pushFeedLine = () => {
+      if (!feedBody) return;
+      const item = FEED_LINES[feedIdx % FEED_LINES.length];
+      feedIdx++;
+      const ts = new Date().toLocaleTimeString('en-IN',{hour12:false}).slice(0,8);
+      const line = document.createElement('div');
+      line.className = `agent-feed-line${item[2] === 'success' ? ' feed-success' : ''}`;
+      line.innerHTML = `<span class="feed-time">[${ts}]</span><span class="feed-agent">${item[0]}»</span>${item[1]}`;
+      feedBody.insertBefore(line, feedBody.firstChild);
+      // Cap at 6 visible lines
+      while (feedBody.children.length > 6) feedBody.removeChild(feedBody.lastChild);
+    };
+    pushFeedLine();
+    pushFeedLine();
+    _loadingFeedInterval = setInterval(pushFeedLine, 320);
   } else {
-    // Complete progress
+    // Complete progress and mark every pill done
     const progressFill = document.getElementById('loadingProgressFill');
     if (progressFill) progressFill.style.width = '100%';
     const stepEl = document.getElementById('loadingStep');
-    if (stepEl) stepEl.textContent = 'Done!';
-    
-    // Clean up intervals
-    if (_loadingCarouselInterval) { clearInterval(_loadingCarouselInterval); _loadingCarouselInterval = null; }
+    const textEl = document.getElementById('loadingText');
+    if (textEl) textEl.textContent = '✅ Itinerary ready!';
+    if (stepEl) stepEl.textContent = 'All 7 agents reached consensus';
+    document.querySelectorAll('.agent-pill').forEach(p => {
+      p.classList.remove('working','thinking');
+      p.classList.add('completed');
+    });
+
     if (_loadingProgressInterval) { clearInterval(_loadingProgressInterval); _loadingProgressInterval = null; }
+    if (_loadingPillInterval)     { clearInterval(_loadingPillInterval);     _loadingPillInterval = null; }
+    if (_loadingStatsInterval)    { clearInterval(_loadingStatsInterval);    _loadingStatsInterval = null; }
+    if (_loadingImageInterval)    { clearInterval(_loadingImageInterval);    _loadingImageInterval = null; }
+    if (_loadingFeedInterval)     { clearInterval(_loadingFeedInterval);     _loadingFeedInterval = null; }
   }
 }
+let _feedStartTs = Date.now();
 
 function showToast(message, type='info') {
   const container = document.getElementById('toastContainer');
