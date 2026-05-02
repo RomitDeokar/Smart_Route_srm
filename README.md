@@ -1,8 +1,8 @@
-# SmartRoute SRMIST - Agentic AI Travel Planner v3.0
+# SmartRoute SRMIST - Complete Agentic AI Travel Planner v4.1
 
 ## Project Overview
 - **Name**: SmartRoute SRMIST
-- **Goal**: Multi-agent autonomous travel intelligence system using 7 AI agents
+- **Goal**: Complete multi-agent autonomous travel intelligence system using 7 operational AI agents
 - **Tech Stack**: Hono (Edge) + TypeScript + Leaflet.js + Chart.js + Tailwind CSS concepts
 - **Platform**: Cloudflare Pages (Edge deployment)
 - **APIs**: All FREE - OpenMeteo, Overpass/OSM, OpenTripMap, Wikipedia, Nominatim (no OpenAI/Claude)
@@ -11,9 +11,9 @@
 - **App**: (deployed on Cloudflare Pages after `npm run deploy`)
 - **API Health**: `/api/health`
 
-## Features (Complete)
+## Complete Agentic AI Project List
 
-### 7 AI Agents
+### 7 Operational AI Agents
 1. **Planner Agent** - MCTS (50 iterations) + Nearest-Neighbor TSP for itinerary optimization
 2. **Weather Risk Agent** - Naive Bayes classification on OpenMeteo data (sunny/cloudy/rainy)
 3. **Crowd Analyzer** - Time-of-day crowd heuristic (6am-midnight prediction)
@@ -31,7 +31,7 @@
 - **POMDP**: Belief state updates over trip quality (excellent/good/average/poor)
 - **MDP Reward Function**: Multi-objective optimization across satisfaction, budget, weather, crowd
 
-### Core Features
+### Integrated Agentic Modules
 - **Interactive Leaflet Map** with day-colored routes, origin-destination lines, satellite/dark/light/street layers
 - **Agentic Booking Wizard** - 8-step workflow (Plan -> Flights -> Trains -> Hotels -> Cabs -> Review -> Pay -> Confirmed)
 - **Multi-City Trip Planner** - Plan across multiple cities with per-city itineraries (from TripSage)
@@ -75,7 +75,8 @@
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/health` | System status + feature list |
+| GET | `/api/health` | System status + feature list + complete project manifest |
+| GET | `/api/project-list` | Complete agentic AI project list, modules, and quality-fix manifest |
 | POST | `/api/generate-trip` | Generate full itinerary |
 | POST | `/api/generate-multi-city` | Multi-city trip planner |
 | POST | `/api/rate` | Rate activity (updates Bayesian/POMDP/QL) |
@@ -132,13 +133,14 @@ npx wrangler pages deploy dist --project-name smartroute-srmist
 - **Virtugo** - Map-based travel with FourSquare-style place search
 - **Previous SmartRoute versions** - All UI/UX patterns, booking wizard, social discovery
 
-## What's NOT Yet Implemented (Future Scope)
-- Real-time collaboration (WebSocket - not supported on Cloudflare Pages)
-- Photo upload and gallery (needs R2 storage)
-- Drag-and-drop itinerary reordering (complex DnD library needed)
-- Gemini API integration for natural language chat (needs API key)
-- Offline mode with service worker
-- Push notifications for weather alerts
+## Completion / Quality Fixes in v4.1
+- Added `/api/project-list` and health manifest for the complete agentic AI project list.
+- Normalized `duration` and `days` request aliases so API clients cannot accidentally generate the wrong trip length.
+- Made itinerary dates start-date aware instead of always mirroring weather API dates.
+- Added resilient POI fallback generation so planning still works when external free APIs rate-limit or return no attractions.
+- Added frontend project-list panel showing all operational agents and integrated modules.
+- Hardened localStorage parsing so corrupt browser state cannot break startup.
+- Escaped chatbot responses before formatting Markdown-style text to avoid unsafe HTML injection.
 
 ## Last Updated
-2026-03-21
+2026-05-02

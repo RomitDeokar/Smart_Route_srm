@@ -50,6 +50,15 @@ a{color:var(--primary);text-decoration:none}
 .btn-edit{background:rgba(245,158,11,0.15);color:#f59e0b}
 .quick-actions{display:flex;gap:6px;margin-top:6px}
 .backend-status{font-size:0.68rem;text-align:center;margin-top:4px;color:var(--text-3)}
+.project-list-panel{margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:linear-gradient(135deg,rgba(102,126,234,0.08),rgba(139,92,246,0.06))}
+.project-status-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px}
+.project-agents{display:flex;flex-direction:column;gap:5px;max-height:170px;overflow-y:auto;padding-right:2px}
+.project-agent{display:flex;gap:7px;align-items:flex-start;font-size:0.72rem;color:var(--text-2)}
+.project-agent-dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 7px var(--success);margin-top:4px;flex-shrink:0}
+.project-agent strong{display:block;color:var(--text-1);font-size:0.74rem;line-height:1.2}
+.project-agent small{display:block;color:var(--text-3);font-size:0.66rem;line-height:1.25;margin-top:1px}
+.project-modules{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;padding-top:7px;border-top:1px solid var(--border)}
+.project-modules span{padding:2px 6px;border-radius:999px;background:var(--bg-3);border:1px solid var(--border);font-size:0.62rem}
 
 /* Layout */
 .app-layout{display:grid;grid-template-columns:290px 1fr 270px;gap:14px;padding:14px 20px;max-width:1800px;margin:0 auto}
