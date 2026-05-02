@@ -6,9 +6,27 @@
 
 const API_BASE = window.location.origin;
 
+function storageGet(key, fallback = '') {
+  try { return localStorage.getItem(key) ?? fallback; } catch(e) { return fallback; }
+}
+
+function safeJsonParse(key, fallback) {
+  try {
+    const raw = storageGet(key, '');
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(fallback)) return Array.isArray(parsed) ? parsed : fallback;
+    if (fallback && typeof fallback === 'object') return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+    return parsed ?? fallback;
+  } catch(e) {
+    try { localStorage.removeItem(key); } catch(_) {}
+    return fallback;
+  }
+}
+
 // === STATE ===
 const state = {
-  theme: localStorage.getItem('sr-theme') || 'light',
+  theme: storageGet('sr-theme', 'light'),
   persona: 'solo',
   itinerary: null,
   agents: {},
@@ -31,10 +49,11 @@ const state = {
   showRoutes: true,
   mapLayer: 'light', // default to light
   bookingCart: { flights:null, trains:null, hotels:null, cabs:null },
-  bookingHistory: JSON.parse(localStorage.getItem('sr-history')||'[]'),
+  bookingHistory: safeJsonParse('sr-history', []),
   packingList: {},
-  packingChecked: JSON.parse(localStorage.getItem('sr-packing')||'{}'),
-  atlasTrips: JSON.parse(localStorage.getItem('sr-atlas')||'[]'),
+  packingChecked: safeJsonParse('sr-packing', {}),
+  atlasTrips: safeJsonParse('sr-atlas', []),
+  projectManifest: null,
   rlChart: null,
   rlDenseChart: null,
   budgetChart: null,
@@ -134,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderBayesian();
   renderInitialRL();
   checkBackend();
+  fetchProjectList();
   updateClocks();
   setInterval(updateClocks, 1000);
   document.getElementById('startDate').valueAsDate = new Date();
@@ -307,6 +327,40 @@ function getTypeEmoji(type) {
 // ============================================
 // FETCH AI STATE FROM BACKEND
 // ============================================
+async function fetchProjectList() {
+  try {
+    const r = await fetch(`${API_BASE}/api/project-list`);
+    const d = await r.json();
+    if (d.success) {
+      state.projectManifest = d;
+      renderProjectList(d);
+    }
+  } catch(e) {}
+}
+
+function renderProjectList(manifest = state.projectManifest) {
+  const panel = document.getElementById('projectListPanel');
+  if (!panel || !manifest) return;
+  const agents = manifest.agenticProjectList || [];
+  const modules = manifest.integratedModules || [];
+  panel.innerHTML = `
+    <div class="project-status-row">
+      <span class="tag tag-success">v${manifest.version || '4.x'}</span>
+      <span class="tag tag-info">${manifest.status || 'complete'}</span>
+      <span class="tag tag-warning">${manifest.deploymentTarget || 'Edge'}</span>
+    </div>
+    <div class="project-agents">
+      ${agents.map(a => `
+        <div class="project-agent">
+          <span class="project-agent-dot"></span>
+          <div><strong>${a.name}</strong><small>${a.method}</small></div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="project-modules text-xs text-muted">${modules.slice(0, 12).map(m => `<span>${m}</span>`).join('')}</div>
+  `;
+}
+
 async function fetchAIState() {
   try {
     const r = await fetch(`${API_BASE}/api/ai-state`);
@@ -569,6 +623,9 @@ function renderItinerary(itin) {
 function renderActivityCard(act, dayNum, idx) {
   const photo = act.photo || PLACEHOLDER_IMG;
   const crowdColor = act.crowd_level > 70 ? 'var(--danger)' : act.crowd_level > 40 ? 'var(--warning)' : 'var(--success)';
+  const costLabel = act.costRange?.label || (act.costEstimate?.range?.label) || `₹${(act.cost||0).toLocaleString()}`;
+  const qualityBadge = act.dataQuality ? `<span class="tag tag-info" title="${act.estimateNote||'Verify before booking'}">${act.dataQuality === 'verified' ? '✅ Verified data' : '🤖 Estimate'}</span>` : '';
+  const liveLinks = act.externalLinks ? `<span class="tag tag-info"><a href="${act.externalLinks.googleMaps||'#'}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">🔎 Verify live</a></span>` : '';
   return `
     <div class="activity-card" data-name="${act.name}" data-lat="${act.lat}" data-lon="${act.lon}">
       <img class="activity-photo" id="act-photo-${dayNum}-${idx}" src="${photo}" alt="${act.name}" onerror="this.src='${PLACEHOLDER_IMG}'" loading="lazy">
@@ -577,10 +634,12 @@ function renderActivityCard(act, dayNum, idx) {
         <div class="activity-desc">${act.description || act.type}</div>
         <div class="activity-tags">
           <span class="tag tag-time"><i class="fas fa-clock"></i> ${act.time} · ${act.duration}</span>
-          <span class="tag tag-cost"><i class="fas fa-rupee-sign"></i> ₹${act.cost}</span>
+          <span class="tag tag-cost"><i class="fas fa-rupee-sign"></i> ${costLabel}</span>
           <span class="tag tag-type">${getTypeEmoji(act.type)} ${act.type}</span>
           <span class="tag tag-crowd" style="color:${crowdColor}"><i class="fas fa-users"></i> ${act.crowd_level}%</span>
           ${act.weather_warning ? `<span class="tag tag-weather">${act.weather_warning}</span>` : ''}
+          ${qualityBadge}
+          ${liveLinks}
         </div>
       </div>
       <div class="activity-rating">
@@ -616,7 +675,7 @@ function renderMap(itin) {
       if (!act.lat || !act.lon) return;
       dayCoords.push([act.lat, act.lon]);
       addMarker(act.lat, act.lon, act.name, act.type,
-        `<b>${act.name}</b><br><small>Day ${day.day} · ${act.time} · ₹${act.cost}</small><br><small>${act.type}</small>`,
+        `<b>${act.name}</b><br><small>Day ${day.day} · ${act.time} · ${(act.costRange?.label)||('₹'+(act.cost||0).toLocaleString())}</small><br><small>${act.type} · ${act.dataQuality||'estimate'}</small>`,
         dayColor);
     });
 
@@ -1256,6 +1315,11 @@ function renderBookingResults(title, results, type) {
   panel.style.display = 'block';
   titleEl.innerHTML = `<i class="fas fa-search"></i> ${title} <span class="text-xs text-muted">(${results.length} options)</span>`;
 
+  const fmtMoney = (value) => `₹${(value||0).toLocaleString()}`;
+  const fmtRange = (item, key='priceRange', fallback='price') => item?.[key]?.label || fmtMoney(item?.[fallback]);
+  const estimateLine = (item) => item?.estimateNote ? `<div class="text-xs text-muted" style="margin-top:4px">🤖 ${item.estimateNote}</div>` : '';
+  const verifyBadge = (item) => item?.requiresLiveVerification ? `<span class="tag tag-warning" style="font-size:0.72rem">Verify live before booking</span>` : '';
+
   const renderPlatforms = (platforms, defaultUrl, defaultName) => {
     const links = platforms || [{name:defaultName, url:defaultUrl}];
     return `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">
@@ -1269,8 +1333,9 @@ function renderBookingResults(title, results, type) {
     list.innerHTML = results.map(f => `
       <div class="booking-card" onclick="selectBooking('flights',${JSON.stringify(f).replace(/"/g,'&quot;')},this)">
         <div class="booking-card-title">${f.airline} — ${f.flight_no}</div>
-        <div class="booking-card-price">₹${f.price.toLocaleString()}</div>
-        <div class="booking-card-meta">${f.departure} → ${f.arrival} · ${f.duration} · ${f.class} · ${f.stops===0?'Non-stop':f.stops+' stop(s)'} · ⭐ ${f.rating}</div>
+        <div class="booking-card-price">${fmtRange(f)} <span class="text-xs text-muted">estimated</span></div>
+        <div class="booking-card-meta">${f.departure} → ${f.arrival} · ${f.duration} · ${f.class} · ${f.stops===0?'Non-stop':(f.stops==='provider'?'Provider verified stops':f.stops+' stop(s)')} · ${verifyBadge(f)}</div>
+        ${estimateLine(f)}
         ${renderPlatforms(f.bookingPlatforms, '#', 'Google Flights')}
       </div>
     `).join('');
@@ -1278,8 +1343,9 @@ function renderBookingResults(title, results, type) {
     list.innerHTML = results.map(t => `
       <div class="booking-card" onclick="selectBooking('trains',${JSON.stringify(t).replace(/"/g,'&quot;')},this)">
         <div class="booking-card-title">${t.train_name} — ${t.train_no}</div>
-        <div class="booking-card-price">₹${t.price.toLocaleString()}</div>
-        <div class="booking-card-meta">${t.departure} · ${t.duration} · Class: ${t.class}</div>
+        <div class="booking-card-price">${fmtRange(t)} <span class="text-xs text-muted">estimated</span></div>
+        <div class="booking-card-meta">${t.departure} · ${t.duration} · Class: ${t.class} · ${verifyBadge(t)}</div>
+        ${estimateLine(t)}
         ${renderPlatforms(t.bookingPlatforms, t.bookingUrl, 'IRCTC')}
       </div>
     `).join('');
@@ -1289,10 +1355,10 @@ function renderBookingResults(title, results, type) {
       const isSrmOfficial = !!h.srmOfficial;
       const priceLabel = (isHostel || h.price_per_night === 0)
         ? `<span style="color:var(--accent,#0a84ff);font-weight:700">On Request — Apply Required</span>`
-        : `₹${(h.price_per_night||0).toLocaleString()}/night`;
+        : `${h.priceRange?.label || `₹${(h.price_per_night||0).toLocaleString()}`} / night estimated`;
       const totalLabel = (isHostel || h.total_price === 0)
         ? `Allocation by SRM Hostel Office`
-        : `Total: ₹${(h.total_price||0).toLocaleString()}`;
+        : `Total est.: ${h.totalPriceRange?.label || `₹${(h.total_price||0).toLocaleString()}`}`;
       const badges = [];
       if (isSrmOfficial) badges.push(`<span class="tag" style="background:#1d4ed8;color:#fff;font-weight:600">🏛️ SRM Official</span>`);
       if (isHostel) {
@@ -1313,7 +1379,8 @@ function renderBookingResults(title, results, type) {
            style="${isSrmOfficial?'border:2px solid #1d4ed8;background:linear-gradient(180deg,rgba(29,78,216,0.06),transparent)':''}">
         <div class="booking-card-title">${h.name} ${'⭐'.repeat(h.stars||0)} ${badges.join(' ')}</div>
         <div class="booking-card-price">${priceLabel}</div>
-        <div class="booking-card-meta">${totalLabel} · Rating: ${h.rating} · ${(h.amenities||[]).slice(0,4).join(', ')}${(h.amenities||[]).length>4 ? ' +more' : ''}</div>
+        <div class="booking-card-meta">${totalLabel} · Rating: ${h.rating} · ${verifyBadge(h)} · ${(h.amenities||[]).slice(0,4).join(', ')}${(h.amenities||[]).length>4 ? ' +more' : ''}</div>
+        ${estimateLine(h)}
         ${h.address ? `<div class="text-xs text-muted" style="margin-top:4px">📍 ${h.address}</div>` : ''}
         ${h.description ? `<div class="text-xs text-muted" style="margin-top:4px">${h.description}</div>` : ''}
         ${applyButton}
@@ -1325,13 +1392,15 @@ function renderBookingResults(title, results, type) {
     list.innerHTML = results.map(c => `
       <div class="booking-card" onclick="selectBooking('cabs',${JSON.stringify(c).replace(/"/g,'&quot;')},this)">
         <div class="booking-card-title">${c.provider} — ${c.type} ${c.rating ? `<span style="color:var(--warning);font-size:0.85rem">⭐ ${c.rating}</span>` : ''}</div>
-        <div class="booking-card-price">₹${c.base_fare} base + ₹${c.price_per_km}/km</div>
+        <div class="booking-card-price">${c.estimated10kmRange?.label || fmtMoney(c.estimated_10km)} for 10km est.</div>
         <div class="booking-card-meta">
-          ${c.estimated_10km ? `🛣️ 10km: ₹${c.estimated_10km}` : ''}
-          ${c.estimated_20km ? ` · 20km: ₹${c.estimated_20km}` : ''}
-          ${c.min_fare ? ` · Min fare: ₹${c.min_fare}` : ''}
+          ${c.estimated_10km ? `🛣️ 10km: ${c.estimated10kmRange?.label || fmtMoney(c.estimated_10km)}` : ''}
+          ${c.estimated_20km ? ` · 20km: ${c.estimated20kmRange?.label || fmtMoney(c.estimated_20km)}` : ''}
+          ${c.min_fare ? ` · Min fare est.: ${fmtMoney(c.min_fare)}` : ''}
+          · ${verifyBadge(c)}
         </div>
         ${c.provider_about ? `<div class="text-xs text-muted" style="margin-top:4px">${c.provider_about}</div>` : ''}
+        ${estimateLine(c)}
         ${renderPlatforms(c.bookingPlatforms, c.bookingUrl, c.provider)}
       </div>
     `).join('');
@@ -1687,11 +1756,12 @@ async function sendChat() {
     const typingEl = document.getElementById(typingId);
     if (typingEl) typingEl.remove();
     
-    // Format markdown-style response
-    let formatted = (d.response || 'Sorry, something went wrong.')
+    // Format markdown-style response after escaping backend text.
+    // This keeps the chatbot safe even when messages include user-provided locations.
+    let formatted = escapeHtml(d.response || 'Sorry, something went wrong.')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\n/g, '<br>')
-      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" style="color:var(--primary)">$1</a>');
+      .replace(/\[(.+?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--primary)">$1</a>');
     
     messages.innerHTML += `<div class="chat-msg bot"><div class="chat-msg-avatar">🧠</div><div class="chat-msg-bubble">${formatted}</div></div>`;
   } catch(e) {
@@ -2008,7 +2078,11 @@ async function checkBackend() {
   try {
     const r = await fetch(`${API_BASE}/api/health`);
     const d = await r.json();
-    document.getElementById('backendStatus').innerHTML = `<span style="color:var(--success)">✅ Connected — ${d.agents} Agents · ${d.engine}</span>`;
+    if (d.project) {
+      state.projectManifest = d.project;
+      renderProjectList(d.project);
+    }
+    document.getElementById('backendStatus').innerHTML = `<span style="color:var(--success)">✅ Connected — ${d.agents} Agents · ${d.engine} · v${d.version || '4.x'}</span>`;
   } catch(e) {
     document.getElementById('backendStatus').innerHTML = `<span style="color:var(--danger)">❌ Backend offline</span>`;
   }
@@ -2368,8 +2442,8 @@ function renderDashboardCharts() {
 // ============================================
 // ENHANCED STATE INITIALIZATION
 // ============================================
-state.journalEntries = JSON.parse(localStorage.getItem('sr-journal') || '[]');
-state.savedTrips = JSON.parse(localStorage.getItem('sr-saved-trips') || '[]');
+state.journalEntries = safeJsonParse('sr-journal', []);
+state.savedTrips = safeJsonParse('sr-saved-trips', []);
 state.multiCityData = null;
 
 // Save trips for comparison
