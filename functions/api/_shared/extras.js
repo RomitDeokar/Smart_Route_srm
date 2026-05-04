@@ -119,7 +119,58 @@ export function getLanguageTips(city) {
     trichy: {language:'Tamil',phrases:[{phrase:'Vanakkam',meaning:'Hello',pronunciation:'va-NAK-kam'},{phrase:'Nandri',meaning:'Thank You',pronunciation:'NAN-dri'}]},
     amaravati: {language:'Telugu',phrases:[{phrase:'Namaskaaram',meaning:'Hello',pronunciation:'na-mas-KAA-ram'},{phrase:'Dhanyavaadaalu',meaning:'Thank You',pronunciation:'dhan-ya-VAA-daa-lu'}]},
   };
-  const key = String(city||'').toLowerCase().replace(/[^a-z]/g,'');
+  const rawLower = String(city||'').toLowerCase();
+  const key = rawLower.replace(/[^a-z]/g,'');
+
+  // SRM campus -> regional language mapping (checked BEFORE generic city match
+  // because campus names like "kattankulathur"/"amaravati" don't contain a base
+  // city name, so substring matching otherwise falls through to Hindi default).
+  // NOTE: SRM Delhi-NCR / SRM Modinagar / SRM Ghaziabad intentionally use the
+  // existing Delhi (Hindi) entry — that behaviour is preserved unchanged.
+  // Order matters: more specific / non-Tamil campuses are checked BEFORE the
+  // Tamil-Nadu default so e.g. "SRM Delhi-NCR" stays Hindi (user request:
+  // "delhi dont change anything") and "SRM Sikkim" stays Nepali.
+  const srmCampusMap = [
+    // Sikkim campus (Gangtok) -> Nepali
+    { match: ['sikkim','gangtok','majitar','rangpo'], region: '__sikkim__' },
+    // Andhra Pradesh campus (Amaravati / Neerukonda / Mangalagiri / Guntur)
+    { match: ['amaravati','amaravathi','neerukonda','mangalagiri','guntur','vijayawada','andhra'], region: 'amaravati' },
+    // Delhi-NCR / Modinagar / Ghaziabad / Sonipat / Haryana -> Hindi (Delhi)
+    { match: ['delhi','ncr','modinagar','ghaziabad','sonipat','haryana','rajivgandhi','meerut'], region: 'delhi' },
+    // Tamil Nadu campuses (SRMIST main + Ramapuram + Vadapalani + Tiruchirappalli)
+    { match: ['kattankulathur','ktr','srmist','potheri','chengalpattu','chengalpet','ramapuram','vadapalani','tiruchirappalli','trichy','tiruchirapalli','chennai'], region: 'chennai' },
+  ];
+
+  // Sikkim has its own Nepali phrase set (most-spoken language in Sikkim).
+  const sikkimTips = {
+    language: 'Nepali',
+    phrases: [
+      {phrase:'Namaste',meaning:'Hello',pronunciation:'na-mas-TE'},
+      {phrase:'Dhanyabad',meaning:'Thank You',pronunciation:'dhan-ya-BAAD'},
+      {phrase:'Kati ho?',meaning:'How much?',pronunciation:'KA-ti ho'},
+      {phrase:'Khana',meaning:'Food',pronunciation:'KHAA-na'},
+      {phrase:'Pani',meaning:'Water',pronunciation:'PAA-ni'},
+      {phrase:'Ho',meaning:'Yes',pronunciation:'HO'},
+      {phrase:'Hoina',meaning:'No',pronunciation:'ho-EE-na'},
+      {phrase:'Maddat',meaning:'Help',pronunciation:'MAD-dat'},
+    ],
+  };
+
+  // Only override when the input clearly references an SRM campus, otherwise
+  // leave Delhi/other cities untouched.
+  const looksLikeSrm = /\bsrm\b/.test(rawLower) || key.startsWith('srm') || key.includes('srm');
+  if (looksLikeSrm) {
+    for (const entry of srmCampusMap) {
+      if (entry.match.some(token => rawLower.includes(token) || key.includes(token.replace(/[^a-z]/g,'')))) {
+        if (entry.region === '__sikkim__') return sikkimTips;
+        const data = regionMap[entry.region];
+        if (data) return data;
+      }
+    }
+    // Default SRM (no specific campus token) -> SRMIST main campus = Chennai/Tamil
+    if (regionMap.chennai) return regionMap.chennai;
+  }
+
   for (const [c, data] of Object.entries(regionMap)) { if (key.includes(c) || c.includes(key)) return data; }
   return {language:'Hindi (default)',phrases:[{phrase:'Namaste',meaning:'Hello',pronunciation:'na-MAS-tay'},{phrase:'Dhanyavaad',meaning:'Thank You',pronunciation:'dhan-ya-VAAD'},{phrase:'Kitna?',meaning:'How much?',pronunciation:'KIT-na'},{phrase:'Khaana',meaning:'Food',pronunciation:'KHAA-na'},{phrase:'Paani',meaning:'Water',pronunciation:'PAA-ni'},{phrase:'Haan',meaning:'Yes',pronunciation:'HAAN'},{phrase:'Nahi',meaning:'No',pronunciation:'na-HI'},{phrase:'Madat',meaning:'Help',pronunciation:'MA-dat'}]};
 }
