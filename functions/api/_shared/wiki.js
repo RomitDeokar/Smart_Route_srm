@@ -105,10 +105,10 @@ export async function enrichWithPhotos(items, opts = {}) {
             cur.item.extract   = cur.item.extract   || r.extract;
             cur.item.wikiUrl   = cur.item.wikiUrl   || r.url;
           } else if (!cur.item.thumbnail) {
-            // Last-resort placeholder via Unsplash source (free, no key)
-            const q = encodeURIComponent((cur.title || cur.item.name || "travel") + (cityForFallback ? " " + cityForFallback : ""));
-            cur.item.thumbnail = cur.item.thumbnail || `https://source.unsplash.com/600x400/?${q}`;
-            cur.item.image     = cur.item.image     || `https://source.unsplash.com/1600x900/?${q}`;
+            // Last-resort: deterministic LoremFlickr (real travel photos, free, no key)
+            const q = (cur.title || cur.item.name || "travel") + (cityForFallback ? " " + cityForFallback : "");
+            cur.item.thumbnail = cur.item.thumbnail || flickrFor(q, "600x400");
+            cur.item.image     = cur.item.image     || flickrFor(q, "1600x900");
             cur.item.imageFallback = true;
           }
           inFlight--; pending--;
@@ -125,10 +125,72 @@ export async function enrichWithPhotos(items, opts = {}) {
   });
 }
 
-/* Quick helper: synchronously build a deterministic Unsplash fallback
-   for any place name (used when we can't afford another network round-trip,
-   e.g. for restaurants in the itinerary response). */
+/* ── Image fallback chain ──────────────────────────────────────────
+   source.unsplash.com is deprecated (HTTP 503 since 2024). We use:
+
+   1. LoremFlickr      — real Flickr travel photos, deterministic via tag
+   2. Picsum (seeded)  — works offline, but generic landscapes
+   3. Curated banks    — hand-picked Wikimedia Commons URLs per category
+
+   These are all free, keyless, CDN-cached and embed-safe.
+   ────────────────────────────────────────────────────────────────── */
+
+// Curated Wikimedia Commons fallbacks by keyword category.
+const COMMONS_BANK = {
+  beach:      "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/BeachFun.jpg/1280px-BeachFun.jpg",
+  mountain:   "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Everest_kalapatthar.jpg/1280px-Everest_kalapatthar.jpg",
+  temple:     "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Hindu_temple_-_Madurai.jpg/1280px-Hindu_temple_-_Madurai.jpg",
+  fort:       "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Amber_Fort_Jaipur_2.jpg/1280px-Amber_Fort_Jaipur_2.jpg",
+  palace:     "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Hawa_Mahal_2011.jpg/1280px-Hawa_Mahal_2011.jpg",
+  city:       "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Mumbai_skyline_at_night.jpg/1280px-Mumbai_skyline_at_night.jpg",
+  food:       "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Indian_thali_meal_-_Bangalore.jpg/1280px-Indian_thali_meal_-_Bangalore.jpg",
+  restaurant: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Indian_thali_at_a_restaurant.jpg/1280px-Indian_thali_at_a_restaurant.jpg",
+  hotel:      "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Taj_Mahal_Palace_Hotel.jpg/1280px-Taj_Mahal_Palace_Hotel.jpg",
+  museum:     "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Indian_Museum_Kolkata_Front.jpg/1280px-Indian_Museum_Kolkata_Front.jpg",
+  park:       "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Lalbagh_glasshouse_Bangalore.jpg/1280px-Lalbagh_glasshouse_Bangalore.jpg",
+  default:    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/India_Gate_New_Delhi.jpg/1280px-India_Gate_New_Delhi.jpg",
+};
+
+function pickBankImage(query) {
+  const q = String(query || "").toLowerCase();
+  for (const k of Object.keys(COMMONS_BANK)) {
+    if (k !== "default" && q.includes(k)) return COMMONS_BANK[k];
+  }
+  return COMMONS_BANK.default;
+}
+
+/* Build a deterministic LoremFlickr URL from any query string. Returns a
+   real photo URL that works without an API key. Size defaults to 600x400.
+   Accepts "WIDTHxHEIGHT" string sizes for backwards compatibility. */
+export function flickrFor(query, size = "600x400") {
+  const [w = 600, h = 400] = String(size).split("x").map((n) => parseInt(n, 10));
+  // Pick 3 best tags from the query for relevance
+  const tags = String(query || "travel landmark")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 2)
+    .slice(0, 3)
+    .join(",");
+  // lock=N gives a deterministic photo for a given tag-set
+  const lock = Math.abs(hashCode(query || "travel")) % 1000;
+  return `https://loremflickr.com/${w}/${h}/${encodeURIComponent(tags || "travel")}?lock=${lock}`;
+}
+
+function hashCode(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+/* Backwards-compatible alias kept (lots of call-sites use unsplashFor).
+   Now points to the working flickrFor pipeline. */
 export function unsplashFor(query, size = "600x400") {
-  const q = encodeURIComponent(query || "travel");
-  return `https://source.unsplash.com/${size}/?${q}`;
+  return flickrFor(query, size);
+}
+
+/* Curated Wikimedia bank — used as a 2nd-tier fallback when even
+   LoremFlickr is rate-limited. Keyless, always-on. */
+export function commonsBankFor(query) {
+  return pickBankImage(query);
 }

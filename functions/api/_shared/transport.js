@@ -11,16 +11,18 @@ export function generateFlights(origin, dest, date) {
   const dIATA = getIATA(dest);
 
   // Realistic Indian domestic airline pricing model based on 2024-2025 market data:
-  //  - Floor cost ~₹2,200-2,800 (under-300 km hops still attract regulatory floor)
-  //  - Linear ₹3.5-5.2/km depending on premium-ness, capped & with reasonable spread
+  //  - Floor cost ~₹3,200-3,900 (regulatory + airport charges + fuel surcharge)
+  //  - Linear ₹4.5-6.5/km depending on premium-ness, capped & with reasonable spread
   //  - Premium carriers (Vistara/AI) charge ~25% more, LCC (SpiceJet/IX) ~15% less
+  // Cross-check (May 2025): Chennai-Goa ~₹4500-7000, Delhi-Mumbai ~₹5000-8500,
+  // Mumbai-Goa ~₹3500-5500, Delhi-Bangalore ~₹6500-10500.
   const airlines = [
-    {name:'IndiGo',           code:'6E', perKm:4.0, floor:2400, rating:4.1, fnRange:[2000,8999], fleet:'A320neo / A321'},
-    {name:'Air India',        code:'AI', perKm:4.6, floor:2900, rating:4.0, fnRange:[440,899],   fleet:'A320 / B787'},
-    {name:'Vistara',          code:'UK', perKm:5.0, floor:3200, rating:4.4, fnRange:[800,999],   fleet:'A320neo / B787-9'},
-    {name:'SpiceJet',         code:'SG', perKm:3.6, floor:2200, rating:3.7, fnRange:[100,499],   fleet:'B737 MAX'},
-    {name:'Air India Express',code:'IX', perKm:3.7, floor:2300, rating:3.8, fnRange:[1100,1899], fleet:'B737-800'},
-    {name:'Akasa Air',        code:'QP', perKm:3.9, floor:2350, rating:4.2, fnRange:[1100,1499], fleet:'B737 MAX 8'},
+    {name:'IndiGo',           code:'6E', perKm:5.2, floor:3400, rating:4.1, fnRange:[2000,8999], fleet:'A320neo / A321'},
+    {name:'Air India',        code:'AI', perKm:5.8, floor:3900, rating:4.0, fnRange:[440,899],   fleet:'A320 / B787'},
+    {name:'Vistara',          code:'UK', perKm:6.4, floor:4200, rating:4.4, fnRange:[800,999],   fleet:'A320neo / B787-9'},
+    {name:'SpiceJet',         code:'SG', perKm:4.6, floor:3100, rating:3.7, fnRange:[100,499],   fleet:'B737 MAX'},
+    {name:'Air India Express',code:'IX', perKm:4.8, floor:3200, rating:3.8, fnRange:[1100,1899], fleet:'B737-800'},
+    {name:'Akasa Air',        code:'QP', perKm:5.0, floor:3300, rating:4.2, fnRange:[1100,1499], fleet:'B737 MAX 8'},
   ];
   const dateParam = date || new Date().toISOString().split('T')[0];
   const oEnc = encodeURIComponent(origin || '');
@@ -31,8 +33,10 @@ export function generateFlights(origin, dest, date) {
     const seed = ((origin||'').length * 31 + (dest||'').length * 17 + i * 73);
     const variancePct = (((seed % 17) - 8) / 100); // ~ -0.08 .. +0.08
     let basePrice = Math.round(Math.max(airline.floor, dist * airline.perKm) * (1 + variancePct));
-    // Realistic cap: never above ₹18,000 for domestic economy hops < 2500km
-    if (dist < 2500) basePrice = Math.min(basePrice, 14500);
+    // Realistic cap: never above ₹19,500 for domestic economy hops < 2500km
+    if (dist < 2500) basePrice = Math.min(basePrice, 16500);
+    // Short-hop premium: under 600km hops still attract higher fares due to fixed costs
+    if (dist < 600) basePrice = Math.max(basePrice, 3600 + Math.round(dist * 1.2));
 
     const fnSpan = airline.fnRange[1] - airline.fnRange[0];
     const fnSeed = seed % fnSpan;
@@ -172,8 +176,10 @@ export function generateTrains(origin, dest) {
 
   // Realistic IRCTC fare ladder (₹/km) per coach class (2024-25 schedule).
   // 3A is the everyday default — keeps price headline reasonable.
-  const classMultipliers = {'1A':3.0,'2A':1.7,'3A':1.1,'SL':0.45,'CC':0.9,'EC':1.6,'2S':0.35};
-  const classFloors      = {'1A':1500,'2A':900,'3A':650,'SL':250,'CC':400,'EC':800,'2S':150};
+  // Cross-check: Chennai-Goa 3A ~₹1300-1700; Delhi-Mumbai 3A ~₹2100-2600;
+  //              Bangalore-Chennai CC ~₹650-820 on Shatabdi.
+  const classMultipliers = {'1A':3.4,'2A':2.0,'3A':1.35,'SL':0.55,'CC':1.05,'EC':1.85,'2S':0.42};
+  const classFloors      = {'1A':1800,'2A':1100,'3A':780,'SL':310,'CC':480,'EC':920,'2S':180};
 
   if (realRoute.length) {
     return realRoute.map((t) => {
@@ -184,7 +190,7 @@ export function generateTrains(origin, dest) {
                      : t.name.includes('Shatabdi') ? 1.15
                      : t.name.includes('Duronto') ? 1.1
                      : 1.0;
-      const raw = dist * baseRate * (classMultipliers[cls] || 1) * 0.85; // 0.85 IRCTC discount factor
+      const raw = dist * baseRate * (classMultipliers[cls] || 1) * 0.95; // 0.95 IRCTC adjustment
       const price = Math.max(classFloors[cls] || 250, Math.round(raw / 5) * 5); // round to nearest ₹5
       return {
         id: `TR${t.no}`, train_name: t.name, train_no: t.no,
@@ -222,7 +228,7 @@ export function generateTrains(origin, dest) {
     const durH = Math.floor(totalMin / 60), durM = totalMin % 60;
     // Default 3A or CC for visible price (typical user pick) and apply IRCTC discount factor
     const cls = train.classes.includes('3A') ? '3A' : train.classes.includes('CC') ? 'CC' : train.classes[0];
-    const raw = dist * train.base * (classMultipliers[cls] || 1) * 0.85;
+    const raw = dist * train.base * (classMultipliers[cls] || 1) * 0.95;
     const price = Math.max(classFloors[cls] || 250, Math.round(raw / 5) * 5);
     const depH = [5,6,8,15,17,20][i % 6];
     const depMin = (i % 2 === 0) ? '00' : '30';

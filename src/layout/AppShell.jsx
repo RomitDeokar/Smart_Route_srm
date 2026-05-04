@@ -17,6 +17,8 @@ const NAV = [
     d:"M2 12a10 10 0 1 0 20 0a10 10 0 0 0-20 0z M2 12h20 M12 2a15.3 15.3 0 0 1 4 10a15.3 15.3 0 0 1-4 10a15.3 15.3 0 0 1-4-10a15.3 15.3 0 0 1 4-10z" },
   { to:"/packing",      label:"Smart Packing",
     d:"M5 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z M9 7V5a3 3 0 0 1 6 0v2" },
+  { to:"/journal",      label:"Trip Journal",
+    d:"M4 4h13a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z M4 4v13a3 3 0 0 0 3 3h0 M8 8h8 M8 12h8 M8 16h5" },
   { to:"/ai",           label:"AI Assistant",
     d:"M13 2L3 14l9 0-1 8 10-12-9 0z" },
   { to:"/reservations", label:"Reservations",

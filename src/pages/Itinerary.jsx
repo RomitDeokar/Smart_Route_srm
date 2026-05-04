@@ -5,6 +5,17 @@ import LanguageTips from "../components/LanguageTips.jsx";
 import TripChecklist from "../components/TripChecklist.jsx";
 import ItineraryMap from "../components/ItineraryMap.jsx";
 
+// Deterministic LoremFlickr fallback (source.unsplash.com is deprecated, returns 503).
+function flickrUrl(query, w = 600, h = 400) {
+  const tags = String(query || "travel landmark")
+    .toLowerCase().replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/).filter(t => t.length > 2).slice(0, 3).join(",");
+  let h1 = 0; const s = String(query || "travel");
+  for (let i = 0; i < s.length; i++) h1 = ((h1 << 5) - h1 + s.charCodeAt(i)) | 0;
+  const lock = Math.abs(h1) % 1000;
+  return `https://loremflickr.com/${w}/${h}/${encodeURIComponent(tags || "travel")}?lock=${lock}`;
+}
+
 const PERSONAS = [
   { id:"explorer",  label:"Explorer",   sub:"Hidden gems" },
   { id:"student",   label:"Student",    sub:"Budget travel" },
@@ -390,7 +401,7 @@ export default function Itinerary({ tripCtx, addToast }) {
                         <motion.div initial={{opacity:0, y:-8}} animate={{opacity:1, y:0}}
                           style={{ position:"relative", height:180, borderRadius:14, overflow:"hidden", marginBottom:14, boxShadow:"var(--shadow)" }}>
                           <img src={itinerary.heroImage} alt={itinerary.destination}
-                            onError={(e)=>{ e.currentTarget.src = `https://source.unsplash.com/1600x900/?${encodeURIComponent(itinerary.destination + ' travel landmark')}`; }}
+                            onError={(e)=>{ e.currentTarget.src = flickrUrl(itinerary.destination + " travel landmark", 1600, 900); }}
                             style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
                           <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.75) 100%)" }} />
                           <div style={{ position:"absolute", left:18, bottom:14, right:18, color:"#fff" }}>
@@ -442,7 +453,7 @@ export default function Itinerary({ tripCtx, addToast }) {
                                         <a href={stop.image || photo} target="_blank" rel="noopener noreferrer"
                                           style={{ flexShrink:0, display:"block", width:104, height:78, borderRadius:10, overflow:"hidden", background:"var(--bg-2)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}>
                                           <img src={photo} alt={stop.name} loading="lazy"
-                                            onError={(e)=>{ e.currentTarget.src = `https://source.unsplash.com/600x400/?${encodeURIComponent(stop.name + ' ' + (itinerary?.destination||''))}`; }}
+                                            onError={(e)=>{ e.currentTarget.src = flickrUrl(stop.name + " " + (itinerary?.destination||""), 600, 400); }}
                                             style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", transition:"transform 0.3s" }}
                                             onMouseOver={(e)=>{ e.currentTarget.style.transform="scale(1.08)"; }}
                                             onMouseOut={(e)=>{ e.currentTarget.style.transform="scale(1)"; }} />
@@ -580,7 +591,7 @@ export default function Itinerary({ tripCtx, addToast }) {
                             {p.thumbnail && (
                               <div style={{ width:"100%", height:130, overflow:"hidden", background:"var(--bg-2)", position:"relative" }}>
                                 <img src={p.thumbnail} alt={p.name} loading="lazy"
-                                  onError={(e)=>{ e.currentTarget.src = `https://source.unsplash.com/600x400/?${encodeURIComponent(p.name + ' ' + (p.type||'place'))}`; }}
+                                  onError={(e)=>{ e.currentTarget.src = flickrUrl(p.name + " " + (p.type||"place"), 600, 400); }}
                                   style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", transition:"transform 0.4s" }}
                                   onMouseOver={(e)=>{ e.currentTarget.style.transform="scale(1.06)"; }}
                                   onMouseOut={(e)=>{ e.currentTarget.style.transform="scale(1)"; }} />

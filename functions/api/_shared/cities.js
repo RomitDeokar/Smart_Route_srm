@@ -272,11 +272,14 @@ export const CITY_TOP_ATTRACTIONS = {
 
 /* Approximate distances between major Indian cities (km) for price estimation. */
 export const CITY_DISTANCES = {
-  chennai: {delhi:2180,mumbai:1340,jaipur:2000,goa:600,bangalore:350,hyderabad:630,kolkata:1660,agra:2100,varanasi:1680,udaipur:1670,kochi:600,shimla:2550,manali:2700,pondicherry:150,amritsar:2600,jodhpur:1950,leh:3200,darjeeling:1900,ooty:280,mysore:480,mahabalipuram:60,madurai:460,thanjavur:340,kodaikanal:430,rishikesh:2350,hampi:580,munnar:500,alleppey:640,tirupati:140,srinagar:3100},
-  delhi: {mumbai:1400,jaipur:280,goa:1900,bangalore:2150,hyderabad:1500,kolkata:1500,agra:230,varanasi:820,udaipur:670,kochi:2700,shimla:350,manali:530,chennai:2180,pondicherry:2300,amritsar:470,jodhpur:590,leh:1000,darjeeling:1550,rishikesh:250,haridwar:220,srinagar:850},
-  mumbai: {jaipur:1150,goa:590,bangalore:980,hyderabad:710,kolkata:2050,agra:1220,varanasi:1330,udaipur:660,kochi:1500,delhi:1400,chennai:1340,pondicherry:1490,amritsar:1840,jodhpur:830,shimla:1750,manali:1850},
-  bangalore: {mysore:150,ooty:275,kochi:550,chennai:350,hyderabad:570,goa:560,mumbai:980,hampi:340,coorg:250},
+  chennai: {delhi:2180,mumbai:1340,jaipur:2000,goa:870,bangalore:350,hyderabad:630,kolkata:1660,agra:2100,varanasi:1680,udaipur:1670,kochi:690,shimla:2550,manali:2700,pondicherry:150,amritsar:2600,jodhpur:1950,leh:3200,darjeeling:1900,ooty:540,mysore:480,mahabalipuram:60,madurai:460,thanjavur:340,kodaikanal:530,rishikesh:2350,hampi:580,munnar:600,alleppey:760,tirupati:140,srinagar:3100,coimbatore:500},
+  delhi: {mumbai:1400,jaipur:280,goa:1900,bangalore:2150,hyderabad:1500,kolkata:1500,agra:230,varanasi:820,udaipur:670,kochi:2700,shimla:350,manali:530,chennai:2180,pondicherry:2300,amritsar:470,jodhpur:590,leh:1000,darjeeling:1550,rishikesh:250,haridwar:220,srinagar:850,coimbatore:2440},
+  mumbai: {jaipur:1150,goa:590,bangalore:980,hyderabad:710,kolkata:2050,agra:1220,varanasi:1330,udaipur:660,kochi:1500,delhi:1400,chennai:1340,pondicherry:1490,amritsar:1840,jodhpur:830,shimla:1750,manali:1850,coimbatore:1320},
+  bangalore: {mysore:150,ooty:275,kochi:550,chennai:350,hyderabad:570,goa:560,mumbai:980,hampi:340,coorg:250,coimbatore:370,madurai:430,delhi:2150},
   kolkata: {darjeeling:600,gangtok:640,varanasi:680,delhi:1500,chennai:1660,mumbai:2050},
+  hyderabad: {chennai:630,bangalore:570,goa:660,mumbai:710,delhi:1500,kolkata:1500,vijayawada:275,vizag:610},
+  jaipur: {delhi:280,agra:240,udaipur:400,jodhpur:340,mumbai:1150,bangalore:1900,chennai:2000,goa:1750},
+  goa: {mumbai:590,bangalore:560,chennai:870,hyderabad:660,delhi:1900,jaipur:1750},
 };
 
 /* IATA codes for major Indian cities. */

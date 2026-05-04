@@ -10,6 +10,7 @@ import AIAssistant  from "./pages/AIAssistant.jsx";
 import Reservations from "./pages/Reservations.jsx";
 import Atlas        from "./pages/Atlas.jsx";
 import Packing      from "./pages/Packing.jsx";
+import Journal      from "./pages/Journal.jsx";
 import Login        from "./pages/Login.jsx";
 import Register     from "./pages/Register.jsx";
 import SplashScreen from "./components/SplashScreen.jsx";
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="reservations" element={<Reservations addToast={addToast} />} />
           <Route path="atlas"        element={<Atlas        tripCtx={tripCtx} addToast={addToast} />} />
           <Route path="packing"      element={<Packing      tripCtx={tripCtx} addToast={addToast} />} />
+          <Route path="journal"      element={<Journal      tripCtx={tripCtx} addToast={addToast} />} />
         </Route>
       </Routes>
     </BrowserRouter>
