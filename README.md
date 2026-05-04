@@ -1,144 +1,201 @@
-# SmartRoute SRMIST - Agentic AI Travel Planner v3.0
+# SmartRoute SRMIST v6.0 — Autonomous Agentic AI Travel Platform
 
-## Project Overview
-- **Name**: SmartRoute SRMIST
-- **Goal**: Multi-agent autonomous travel intelligence system using 7 AI agents
-- **Tech Stack**: Hono (Edge) + TypeScript + Leaflet.js + Chart.js + Tailwind CSS concepts
-- **Platform**: Cloudflare Pages (Edge deployment)
-- **APIs**: All FREE - OpenMeteo, Overpass/OSM, OpenTripMap, Wikipedia, Nominatim (no OpenAI/Claude)
+> Multi-agent autonomous AI travel planner. React + Cloudflare Pages Functions.
+> The working GitHub backend (7-agent RL engine) merged with a brand-new React UI,
+> JWT auth, user dashboards and an autonomous-pilot pipeline.
+
+---
+
+## What's new in v6.0
+
+* **Brand-new React UI** (Plus Jakarta Sans + Sora, Framer Motion, light/blue SaaS look)
+* **Login / Register pages** with JWT auth (HS256, Web Crypto only)
+* **User dashboard** with hero, live map, AI sync feed, curated destinations
+* **Sidebar AppShell** with 8 pages (Dashboard, Map, Budget, Itinerary, Atlas, Packing, AI, Reservations)
+* **Autonomous agent fleet (15 agents)** including new:
+  * `optimize` — Q-Learning ε-greedy budget allocator (8 strategies, 60–200 episodes)
+  * `autopilot` — End-to-end orchestrator that runs Scout → Monitor → Optimize → Itinerary → Critic → Negotiate
+* **All 7 original RL/AI agents preserved** (MCTS, Q-Learning, Bayesian Thompson, POMDP, Naive Bayes)
+* **Full city database** (45+ Indian cities + SRM campuses) with curated POIs and coordinates
+
+---
 
 ## Live URLs
-- **App**: (deployed on Cloudflare Pages after `npm run deploy`)
-- **API Health**: `/api/health`
 
-## Features (Complete)
+| Service | URL |
+|---------|-----|
+| Local dev    | <http://localhost:3000> |
+| Health check | `/api/health` |
 
-### 7 AI Agents
-1. **Planner Agent** - MCTS (50 iterations) + Nearest-Neighbor TSP for itinerary optimization
-2. **Weather Risk Agent** - Naive Bayes classification on OpenMeteo data (sunny/cloudy/rainy)
-3. **Crowd Analyzer** - Time-of-day crowd heuristic (6am-midnight prediction)
-4. **Budget Optimizer** - MDP-based reward function: R = 0.4*rating + 0.3*budget + 0.2*weather - 0.1*crowd
-5. **Preference Agent** - Bayesian Beta distributions (per-category) + Dirichlet time allocation
-6. **Booking Assistant** - Multi-platform search (flights, trains, hotels, cabs) with real booking URLs
-7. **Explainability Agent** - MDP decision trace + POMDP belief state visualization
-
-### AI/ML Algorithms
-- **Q-Learning**: epsilon-greedy with decay (0.3 -> 0.05), Q-table persisted
-- **Monte Carlo Tree Search (MCTS)**: 50 iterations with UCB1 selection for route optimization
-- **Bayesian Inference**: Beta distributions for preferences with 95% CI
-- **Dirichlet Distribution**: Time allocation proportions across categories
-- **Naive Bayes**: Gaussian likelihood weather classification
-- **POMDP**: Belief state updates over trip quality (excellent/good/average/poor)
-- **MDP Reward Function**: Multi-objective optimization across satisfaction, budget, weather, crowd
-
-### Core Features
-- **Interactive Leaflet Map** with day-colored routes, origin-destination lines, satellite/dark/light/street layers
-- **Agentic Booking Wizard** - 8-step workflow (Plan -> Flights -> Trains -> Hotels -> Cabs -> Review -> Pay -> Confirmed)
-- **Multi-City Trip Planner** - Plan across multiple cities with per-city itineraries (from TripSage)
-- **Trip Comparison** - Side-by-side destination comparison table
-- **Destination Recommendations** - AI-powered "Help Me Choose" with interest matching
-- **Half-Day Planner** - Quick plan for remaining time
-- **Emergency Replan** - Delay/Weather/Crowd-based itinerary adjustment with MDP decisions
-- **Smart Packing List** - AI-curated based on duration, weather, persona (from NOMAD)
-- **Travel Atlas** - World map tracking all planned trips (from NOMAD)
-- **Dashboard** - Travel stats, reward progression chart, preference radar chart
-- **Trip Journal** - Personal notes with date/destination tagging (from NOMAD)
-- **Emergency Contacts** - City-specific emergency numbers (police, ambulance, hospital, etc.)
-- **Safety Tips** - Persona + city-specific safety recommendations
-- **Currency Converter** - INR/USD/EUR/GBP/JPY/THB with fallback rates
-- **World Clock** - Local + destination time display
-- **Language Tips** - Regional phrases for 8+ Indian languages
-- **Social Discovery** - Trending spots, hidden gems (crowd < 40%), foodie spots
-- **AI Chatbot** - Context-aware assistant with 10+ topic categories
-- **Booking History** - Sidebar with all past bookings saved to localStorage
-- **PDF Export** - Print-friendly itinerary with all details
-- **Share Trip** - Web Share API or clipboard copy
-- **Voice Input** - Speech recognition for destination entry
-- **GPS Detection** - Auto-detect origin city via Nominatim reverse geocoding
-- **Dark/Light Theme** - System-aware with manual toggle
-- **Agent Communication Graph** - Canvas visualization of agent interactions
-- **MDP/POMDP Flow Diagrams** - Visual state space and pipeline
-- **Activity Rating** - Star ratings that update Bayesian/POMDP/Q-Learning in real-time
-
-### Persona Modes
-- Solo Traveler, Family, Luxury, Adventure (each affects budget, packing, recommendations)
-
-### Data Sources (All FREE)
-- **OpenMeteo** - Weather forecasts (16-day, hourly humidity)
-- **Overpass API** - OpenStreetMap attractions, tourism data
-- **OpenTripMap** - Cultural, historic, natural places
-- **Wikipedia API** - Place photos and thumbnails
-- **Nominatim** - Geocoding and reverse geocoding
-- **exchangerate.host** - Currency conversion (with offline fallbacks)
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | System status + feature list |
-| POST | `/api/generate-trip` | Generate full itinerary |
-| POST | `/api/generate-multi-city` | Multi-city trip planner |
-| POST | `/api/rate` | Rate activity (updates Bayesian/POMDP/QL) |
-| POST | `/api/search-flights` | Search flight options |
-| POST | `/api/search-trains` | Search train options |
-| POST | `/api/search-hotels` | Search hotel options |
-| POST | `/api/search-cabs` | Search local transport |
-| POST | `/api/recommendations` | AI destination recommendations |
-| POST | `/api/compare-trips` | Compare multiple trips |
-| POST | `/api/replan` | Emergency replan (delay/weather/crowd) |
-| GET | `/api/nearby` | Nearby places via Overpass |
-| GET | `/api/emergency-contacts` | City emergency numbers |
-| GET | `/api/safety-tips` | City + persona safety tips |
-| GET | `/api/ai-state` | Current AI agent state |
-| POST | `/api/chat` | AI chatbot with context |
-
-## Project Structure
-```
-webapp/
-├── src/
-│   └── index.tsx          # Hono backend (all 7 agents + APIs)
-├── public/static/
-│   ├── index.html         # Complete SPA UI
-│   ├── app.js            # Frontend logic (1700+ lines)
-│   ├── styles.css        # Full CSS (380+ lines)
-│   └── style.css         # Legacy styles
-├── ecosystem.config.cjs   # PM2 configuration
-├── package.json
-├── vite.config.ts
-├── wrangler.jsonc
-└── README.md
-```
+---
 
 ## Quick Start
+
 ```bash
 npm install
 npm run build
-pm2 start ecosystem.config.cjs
-# or: npx wrangler pages dev dist --ip 0.0.0.0 --port 3000
+npx wrangler pages dev dist --ip 0.0.0.0 --port 3000
+# or use PM2: pm2 start ecosystem.config.cjs
 ```
 
-## Deployment
+Demo login: any email + any password → instant JWT, or click **Continue as Demo User**.
+
+---
+
+## Architecture
+
+```
+webapp/
+├── src/                          ← React + Vite frontend
+│   ├── App.jsx                   ← React Router + auth + toasts + splash
+│   ├── main.jsx
+│   ├── styles.css                ← 2000+ line design system
+│   ├── layout/AppShell.jsx       ← Sidebar + topbar + chat fab
+│   ├── pages/
+│   │   ├── Dashboard.jsx         ← Main user dashboard (1000+ lines)
+│   │   ├── MapExplorer.jsx
+│   │   ├── Budget.jsx
+│   │   ├── Itinerary.jsx         ← Persona, day timeline, AI plans
+│   │   ├── AIAssistant.jsx
+│   │   ├── Reservations.jsx
+│   │   ├── Atlas.jsx             ← Travel atlas / world tracker
+│   │   ├── Packing.jsx           ← Smart packing list
+│   │   ├── Login.jsx             ← Auth — branded + JWT
+│   │   └── Register.jsx
+│   ├── components/               ← 35+ components (Map, Chat, Charts, Pipeline, …)
+│   ├── hooks/                    ← useAuth, useAgentStream
+│   └── lib/api.js                ← Robust fetch wrapper (handles empty/non-JSON)
+│
+├── functions/api/                ← Cloudflare Pages Functions backend
+│   ├── _shared/                  ← Auth helpers, city data, planner, hotels, transport
+│   │   ├── auth.js               ← HS256 JWT (Web Crypto)
+│   │   ├── cities.js             ← 45+ cities, 200+ POIs with coordinates
+│   │   ├── planner.js            ← Multi-agent plan builder
+│   │   ├── hotels-real.js        ← Realistic hotel inventory + booking URLs
+│   │   ├── transport.js          ← Flights/trains generator
+│   │   ├── extras.js             ← Restaurants, language tips, packing, safety
+│   │   └── srm.js                ← SRM-specific campus data
+│   ├── auth/{login,register,me}.js
+│   ├── autonomous/
+│   │   ├── status.js             ← 13-agent fleet heartbeat
+│   │   ├── scout.js              ← Persona-weighted attraction scoring
+│   │   ├── monitor.js            ← Weather + booking + crowd watchpoints
+│   │   ├── critic.js             ← Rubric-weighted self-audit
+│   │   ├── negotiate.js          ← Bayesian discount + 5-round bargaining
+│   │   ├── replan.js             ← Recovery / contingency planner
+│   │   ├── optimize.js           ← NEW · Q-Learning budget optimizer
+│   │   └── autopilot.js          ← NEW · End-to-end orchestrator
+│   ├── itinerary.js              ← Day-by-day plan + real attractions + weather
+│   ├── plan.js                   ← Multi-agent mock-AI plan
+│   ├── chat.js                   ← Context-aware chatbot
+│   ├── nearby.js, recommendations.js, packing-list.js, …
+│   ├── flights/search.js, hotels/search.js, trains/search.js, cabs/search.js
+│   ├── budget/{create,update,suggest,status}.js
+│   └── payments/checkout.js
+│
+├── index.html                    ← Vite entry
+├── vite.config.ts                ← React plugin + dev proxy
+├── wrangler.jsonc                ← Cloudflare Pages config
+└── ecosystem.config.cjs          ← PM2 config (wrangler pages dev)
+```
+
+---
+
+## API Endpoints
+
+### Auth
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/register` | Create account, returns JWT |
+| POST | `/api/auth/login`    | Login, returns JWT (auto-provisions across edge isolates) |
+| GET  | `/api/auth/me`       | Current user from Bearer token |
+
+### Trip planning
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/itinerary`           | Full structured day-by-day plan with weather + transport |
+| POST | `/api/plan`                | Multi-agent mock-AI plan |
+| POST | `/api/chat`                | Context-aware AI chatbot |
+| GET  | `/api/nearby`              | Overpass/OpenTripMap nearby places |
+| POST | `/api/recommendations`     | AI destination recommendations |
+| POST | `/api/restaurants`         | Restaurant suggestions |
+| POST | `/api/quick-trip`          | GPS-based half-day plan |
+| POST | `/api/risk-score`          | AI-powered travel risk |
+| POST | `/api/packing-list`        | AI packing list |
+| POST | `/api/crowd-info`          | Crowd density predictions |
+| POST | `/api/emergency-options`   | Emergency replan |
+| GET  | `/api/safety-tips`         | City + persona safety tips |
+| GET  | `/api/language-tips`       | Regional Indian phrases |
+
+### Bookings & payments
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/flights/search`   | Realistic flight search |
+| POST | `/api/trains/search`    | Train search |
+| POST | `/api/hotels/search`    | Hotel search with booking URLs |
+| POST | `/api/cabs/search`      | Local transport |
+| POST | `/api/activities/search`| Activities |
+| POST | `/api/budget/create`    | Create budget |
+| POST | `/api/budget/update`    | Log expense |
+| GET  | `/api/budget/suggest`   | AI budget suggestions |
+| GET  | `/api/budget/status`    | Budget status |
+| POST | `/api/payments/checkout`| Stripe checkout session |
+
+### Autonomous agents
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/api/autonomous/status`     | 15-agent fleet heartbeat |
+| POST     | `/api/autonomous/scout`      | Hidden gems + persona ranking |
+| POST     | `/api/autonomous/monitor`    | Live watchpoints + alerts |
+| POST     | `/api/autonomous/critic`     | Rubric-weighted self-audit |
+| POST     | `/api/autonomous/negotiate`  | Bayesian discount bargaining |
+| POST     | `/api/autonomous/replan`     | Recovery / contingency planner |
+| POST     | `/api/autonomous/optimize`   | **NEW** — Q-Learning budget allocator |
+| POST     | `/api/autonomous/autopilot`  | **NEW** — End-to-end pipeline orchestrator |
+
+---
+
+## AI / RL Algorithms
+
+| Algorithm | Where | Details |
+|-----------|-------|---------|
+| Q-Learning (ε-greedy)        | `autonomous/optimize.js` | 60–200 episodes, decay=0.985, α=0.18 |
+| Thompson Sampling (Beta)     | `_shared/planner.js`     | Per-category preference posterior |
+| MCTS + UCB1                  | `_shared/planner.js`     | 200 iterations route planner |
+| MDP value iteration          | `_shared/planner.js`     | Policy decision for activity scheduling |
+| Naive Bayes (Bernoulli)      | `_shared/planner.js`     | Weather risk classification |
+| Gaussian-Process (RBF)       | `_shared/planner.js`     | Crowd density surrogate |
+| Bayesian discount prior      | `autonomous/negotiate.js`| 5-round iterative bargaining |
+| Rubric-weighted audit        | `autonomous/critic.js`   | 6-criterion self-critique |
+| Persona-weighted scoring     | `autonomous/scout.js`    | Type/description matching |
+
+---
+
+## Deployment (Cloudflare Pages)
+
 ```bash
 npm run build
 npx wrangler pages deploy dist --project-name smartroute-srmist
 ```
 
-## Reference Projects Integrated
-- **Original SmartRoute** - Core 7-agent system, MDP/RL, Bayesian, POMDP
-- **NOMAD** - Atlas, packing lists, drag-drop planning, dashboard, notes, file management
-- **TripSage AI** - Multi-city routing, edge-first architecture, AI gateway pattern
-- **Flight Finder CrewAI** - Multi-agent booking coordination concept
-- **Travel Itinerary Generator** - Weather-aware itinerary, Gemini integration concept
-- **Virtugo** - Map-based travel with FourSquare-style place search
-- **Previous SmartRoute versions** - All UI/UX patterns, booking wizard, social discovery
+The `dist/` folder is the static React build; `functions/` is auto-detected
+by Cloudflare Pages and exposed under `/api/*` as edge functions. JWT secret
+can be configured via the dashboard or `wrangler secret put JWT_SECRET`.
 
-## What's NOT Yet Implemented (Future Scope)
-- Real-time collaboration (WebSocket - not supported on Cloudflare Pages)
-- Photo upload and gallery (needs R2 storage)
-- Drag-and-drop itinerary reordering (complex DnD library needed)
-- Gemini API integration for natural language chat (needs API key)
-- Offline mode with service worker
-- Push notifications for weather alerts
+---
+
+## Bug fixes vs previous releases
+
+* Robust `safeJson` fetch wrapper — never throws on empty / non-JSON
+* Login auto-provisions across edge isolates (per-isolate user store)
+* Itinerary anchored to destination coords (no more 100 km off-map markers)
+* Distance filter (≤ 120 km) on attractions to drop fuzzy-matched outliers
+* Restaurants sorted by haversine distance from destination
+* `register` is idempotent if same email+password is re-submitted
+* All API routes wrap JSON parsing in try/catch (no 500s on bad bodies)
+* Edge-safe (no Node.js Buffer / fs / Stripe SDK — all Web Crypto)
+
+---
 
 ## Last Updated
-2026-03-21
+2026-05-04 — v6.0 (React UI + JWT auth + autopilot + optimize agents)
