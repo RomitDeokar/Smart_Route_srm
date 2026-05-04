@@ -9,6 +9,7 @@ import { fetchWeather, weatherEmoji } from "./_shared/data.js";
 import { isSRMCity } from "./_shared/srm.js";
 import { generateFlights, generateTrains } from "./_shared/transport.js";
 import { generateHotels, generateCabs } from "./_shared/hotels-real.js";
+import { enrichWithPhotos, unsplashFor } from "./_shared/wiki.js";
 
 export const onRequestOptions = () => jsonResponse({ ok: true });
 
@@ -46,6 +47,20 @@ export const onRequestPost = async ({ request }) => {
     haversineKm(a.lat, a.lon, geoDest.lat, geoDest.lon) <= 120
   );
 
+  // Enrich attractions with Wikipedia photos + extracts (parallel, time-bounded)
+  // Limit to first 24 to stay within Cloudflare Worker subrequest budget.
+  try {
+    const head = curated.slice(0, 24);
+    const tail = curated.slice(24);
+    const enriched = await enrichWithPhotos(head, {
+      titleKey: "wikiTitle",
+      fallbackKey: "name",
+      cityForFallback: cityKey,
+      concurrency: 8,
+    });
+    curated = [...enriched, ...tail];
+  } catch { /* enrichment is best-effort */ }
+
   // Live weather (best-effort)
   let weather = [];
   try {
@@ -61,6 +76,12 @@ export const onRequestPost = async ({ request }) => {
       const db = haversineKm(b.lat || geoDest.lat, b.lon || geoDest.lon, geoDest.lat, geoDest.lon);
       return da - db;
     });
+    // Decorate restaurants with Unsplash placeholders (free, deterministic)
+    restaurants = restaurants.map(r => ({
+      ...r,
+      thumbnail: r.thumbnail || unsplashFor(`${r.cuisine || "indian"} food restaurant ${cityKey}`, "600x400"),
+      image:     r.image     || unsplashFor(`${r.cuisine || "indian"} food restaurant ${cityKey}`, "1200x800"),
+    }));
   }
 
   const languageTips = getLanguageTips(place);
@@ -75,6 +96,14 @@ export const onRequestPost = async ({ request }) => {
   try { trains  = orig ? generateTrains(orig, place).slice(0, 6) : []; } catch { trains = []; }
   try { hotels  = generateHotels(place, totalDays, persona || "explorer").slice(0, 8); } catch { hotels = []; }
   try { cabs    = generateCabs(place).slice(0, 8); } catch { cabs = []; }
+
+  // Hotels & destination hero photo (low-cost decoration)
+  hotels = hotels.map(h => ({
+    ...h,
+    thumbnail: h.thumbnail || h.image || unsplashFor(`${h.name || "hotel"} ${cityKey}`, "600x400"),
+    image:     h.image     || unsplashFor(`${h.name || "hotel"} ${cityKey}`, "1200x800"),
+  }));
+  const heroImage = curated.find(c => c.image)?.image || unsplashFor(`${place} travel landmark`, "1600x900");
 
   // Distance/route info for the trip header
   const routeKm   = orig ? getDistance(orig, place) : null;
@@ -99,9 +128,10 @@ export const onRequestPost = async ({ request }) => {
       a1 && {
         type: "Attraction", time: "09:00",
         name: a1.name,
-        note: a1.description || `Iconic ${a1.type || "spot"} in ${place}.`,
+        note: a1.extract || a1.description || `Iconic ${a1.type || "spot"} in ${place}.`,
         lat: a1.lat, lon: a1.lon, kind: a1.type || "attraction",
-        wikiTitle: a1.wikiTitle,
+        wikiTitle: a1.wikiTitle, wikiUrl: a1.wikiUrl,
+        thumbnail: a1.thumbnail, image: a1.image, extract: a1.extract,
         mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a1.name + " " + place)}`,
       },
       r1 && {
@@ -109,6 +139,7 @@ export const onRequestPost = async ({ request }) => {
         name: r1.name,
         note: `${r1.cuisine} · ${r1.price_range} · ₹${r1.avgCost} per person · ⭐ ${r1.rating}`,
         lat: r1.lat, lon: r1.lon, kind: "restaurant",
+        thumbnail: r1.thumbnail, image: r1.image,
         bookingUrl: r1.bookingUrl || r1.zomato || `https://www.zomato.com/${encodeURIComponent(cityKey)}/restaurants`,
         mapsUrl: r1.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r1.name + " " + place)}`,
         cost: r1.avgCost,
@@ -116,17 +147,19 @@ export const onRequestPost = async ({ request }) => {
       a2 && {
         type: "Attraction", time: "14:30",
         name: a2.name,
-        note: a2.description || `Heritage / ${a2.type || "site"} stop.`,
+        note: a2.extract || a2.description || `Heritage / ${a2.type || "site"} stop.`,
         lat: a2.lat, lon: a2.lon, kind: a2.type || "attraction",
-        wikiTitle: a2.wikiTitle,
+        wikiTitle: a2.wikiTitle, wikiUrl: a2.wikiUrl,
+        thumbnail: a2.thumbnail, image: a2.image, extract: a2.extract,
         mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a2.name + " " + place)}`,
       },
       a3 && {
         type: "Activity", time: "17:00",
         name: a3.name,
-        note: a3.description || `Late-afternoon ${a3.type || "activity"}.`,
+        note: a3.extract || a3.description || `Late-afternoon ${a3.type || "activity"}.`,
         lat: a3.lat, lon: a3.lon, kind: a3.type || "activity",
-        wikiTitle: a3.wikiTitle,
+        wikiTitle: a3.wikiTitle, wikiUrl: a3.wikiUrl,
+        thumbnail: a3.thumbnail, image: a3.image, extract: a3.extract,
         mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a3.name + " " + place)}`,
       },
       r2 && {
@@ -134,6 +167,7 @@ export const onRequestPost = async ({ request }) => {
         name: r2.name,
         note: `Evening dining · ${r2.cuisine} · ₹${r2.avgCost} per person`,
         lat: r2.lat, lon: r2.lon, kind: "restaurant",
+        thumbnail: r2.thumbnail, image: r2.image,
         bookingUrl: r2.bookingUrl || r2.zomato || `https://www.zomato.com/${encodeURIComponent(cityKey)}/restaurants`,
         mapsUrl: r2.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r2.name + " " + place)}`,
         cost: r2.avgCost,
@@ -175,6 +209,7 @@ export const onRequestPost = async ({ request }) => {
         fromIATA: oIATA, toIATA: dIATA,
         distanceKm: routeKm,
       } : null,
+      heroImage,
       days,
       allStops,
       weather,

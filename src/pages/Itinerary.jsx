@@ -121,10 +121,33 @@ export default function Itinerary({ tripCtx, addToast }) {
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyCat, setNearbyCat]   = useState("all");
 
+  const findNearbyAt = async (lat, lon, catOverride) => {
+    const cat = catOverride || nearbyCat;
+    setNearbyLoading(true);
+    pushLog(`🛰️ Searching nearby @ ${lat.toFixed(4)}, ${lon.toFixed(4)} · category=${cat}`, "info");
+    try {
+      const r = await fetch(`/api/nearby?lat=${lat}&lon=${lon}&radius=3000&category=${cat}`);
+      const d = await r.json();
+      if (d.ok) {
+        setNearby({ items: d.items || [], origin: d.origin, source: d.source, hint: d.hint });
+        pushLog(`🗺️ Found ${d.count} nearby places (${d.source})`, "success");
+        if (d.count > 0) addToast(`Found ${d.count} nearby places`, "success");
+        else addToast("No nearby POIs found — try another category", "warning");
+      } else {
+        pushLog(`Nearby search failed: ${d.error || "unknown"}`, "error");
+        addToast("No nearby places found", "warning");
+      }
+    } catch (e) {
+      pushLog(`Nearby fetch error: ${e.message}`, "error");
+      addToast(e.message, "error");
+    } finally { setNearbyLoading(false); }
+  };
+
   const findNearby = async (catOverride) => {
     const cat = catOverride || nearbyCat;
     if (!navigator.geolocation) {
-      addToast("Geolocation not supported by your browser", "error");
+      addToast("Geolocation not supported — using destination instead", "warning");
+      if (itinerary?.destCoords) return findNearbyAt(itinerary.destCoords.lat, itinerary.destCoords.lon, cat);
       return;
     }
     setNearbyLoading(true);
@@ -132,28 +155,19 @@ export default function Itinerary({ tripCtx, addToast }) {
     addToast("Getting your location…", "info");
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        pushLog(`📡 GPS lock · ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`, "success");
-        try {
-          const r = await fetch(`/api/nearby?lat=${latitude}&lon=${longitude}&radius=3000&category=${cat}`);
-          const d = await r.json();
-          if (d.ok) {
-            setNearby({ items: d.items || [], origin: d.origin, source: d.source });
-            pushLog(`🗺️ Found ${d.count} nearby places (${d.source})`, "success");
-            addToast(`Found ${d.count} nearby places`, "success");
-          } else {
-            pushLog(`Nearby search failed: ${d.error}`, "error");
-            addToast("No nearby places found", "warning");
-          }
-        } catch (e) {
-          pushLog(`Nearby fetch error: ${e.message}`, "error");
-          addToast(e.message, "error");
-        } finally { setNearbyLoading(false); }
+        const { latitude, longitude, accuracy } = pos.coords;
+        pushLog(`📡 GPS lock · ${latitude.toFixed(4)}, ${longitude.toFixed(4)} · ±${Math.round(accuracy||0)}m`, "success");
+        await findNearbyAt(latitude, longitude, cat);
       },
       (err) => {
         pushLog(`GPS denied: ${err.message}`, "error");
-        addToast("Location permission denied — please allow GPS access", "error");
-        setNearbyLoading(false);
+        if (itinerary?.destCoords) {
+          addToast("GPS unavailable — searching near destination instead", "warning");
+          findNearbyAt(itinerary.destCoords.lat, itinerary.destCoords.lon, cat);
+        } else {
+          addToast("Location permission denied — please allow GPS access or set a destination", "error");
+          setNearbyLoading(false);
+        }
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
     );
@@ -372,6 +386,24 @@ export default function Itinerary({ tripCtx, addToast }) {
                     </div>
                   ) : (
                     <>
+                      {itinerary.heroImage && (
+                        <motion.div initial={{opacity:0, y:-8}} animate={{opacity:1, y:0}}
+                          style={{ position:"relative", height:180, borderRadius:14, overflow:"hidden", marginBottom:14, boxShadow:"var(--shadow)" }}>
+                          <img src={itinerary.heroImage} alt={itinerary.destination}
+                            onError={(e)=>{ e.currentTarget.src = `https://source.unsplash.com/1600x900/?${encodeURIComponent(itinerary.destination + ' travel landmark')}`; }}
+                            style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+                          <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.75) 100%)" }} />
+                          <div style={{ position:"absolute", left:18, bottom:14, right:18, color:"#fff" }}>
+                            <div style={{ fontSize:22, fontWeight:700, textShadow:"0 2px 12px rgba(0,0,0,0.6)" }}>
+                              {itinerary.destination}
+                            </div>
+                            <div style={{ fontSize:12, opacity:0.92, marginTop:2, textShadow:"0 1px 6px rgba(0,0,0,0.8)" }}>
+                              {itinerary.days.length} days · {itinerary.totalAttractions || itinerary.allStops?.length || 0} curated stops
+                              {itinerary.route?.distanceKm && ` · ${itinerary.route.distanceKm} km from ${itinerary.origin}`}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
                       <p style={{ fontSize:13, color:"var(--text-2)", marginBottom:14 }}>{itinerary.summary}</p>
                       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
                         {itinerary.days.map(d=>(
@@ -399,35 +431,59 @@ export default function Itinerary({ tripCtx, addToast }) {
                             <div className="timeline-stops">
                               {day.plan.map((stop,i)=>{
                                 const meta = STOP_COLORS[stop.type] || STOP_COLORS.Activity;
+                                const photo = stop.thumbnail || stop.image;
                                 return (
                                   <motion.div key={i} className={`timeline-stop ${i===0?"highlight":""}`}
-                                    initial={{opacity:0,x:-8}} animate={{opacity:1,x:0}} transition={{delay:i*0.06}}>
+                                    initial={{opacity:0,x:-8}} animate={{opacity:1,x:0}} transition={{delay:i*0.06}}
+                                    whileHover={{ scale: 1.01, x: 2 }}>
                                     <div className="stop-time">{stop.time || `${8+i*2}:00`}</div>
-                                    <div className="stop-body">
-                                      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2, flexWrap:"wrap" }}>
-                                        <span style={{ fontSize:11, background:meta.bg, color:meta.color, padding:"2px 7px", borderRadius:"var(--r-full)", fontWeight:600 }}>{stop.type}</span>
-                                        <div className="stop-title">{stop.name}</div>
-                                      </div>
-                                      <div className="stop-detail">{stop.note}</div>
-                                      <div style={{ display:"flex", gap:8, marginTop:6, flexWrap:"wrap" }}>
-                                        {stop.mapsUrl && (
-                                          <a href={stop.mapsUrl} target="_blank" rel="noopener noreferrer"
-                                            style={{ fontSize:11, color:"var(--blue)", fontWeight:600, textDecoration:"none" }}>
-                                            📍 Maps
-                                          </a>
+                                    <div className="stop-body" style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
+                                      {photo && (
+                                        <a href={stop.image || photo} target="_blank" rel="noopener noreferrer"
+                                          style={{ flexShrink:0, display:"block", width:104, height:78, borderRadius:10, overflow:"hidden", background:"var(--bg-2)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}>
+                                          <img src={photo} alt={stop.name} loading="lazy"
+                                            onError={(e)=>{ e.currentTarget.src = `https://source.unsplash.com/600x400/?${encodeURIComponent(stop.name + ' ' + (itinerary?.destination||''))}`; }}
+                                            style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", transition:"transform 0.3s" }}
+                                            onMouseOver={(e)=>{ e.currentTarget.style.transform="scale(1.08)"; }}
+                                            onMouseOut={(e)=>{ e.currentTarget.style.transform="scale(1)"; }} />
+                                        </a>
+                                      )}
+                                      <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2, flexWrap:"wrap" }}>
+                                          <span style={{ fontSize:11, background:meta.bg, color:meta.color, padding:"2px 7px", borderRadius:"var(--r-full)", fontWeight:600 }}>{stop.type}</span>
+                                          <div className="stop-title">{stop.name}</div>
+                                        </div>
+                                        {stop.extract && (
+                                          <div style={{ fontSize:12, color:"var(--text-2)", lineHeight:1.45, marginTop:4, marginBottom:4 }}>
+                                            {stop.extract.length > 180 ? stop.extract.slice(0,180)+"…" : stop.extract}
+                                          </div>
                                         )}
-                                        {stop.wikiTitle && (
-                                          <a href={`https://en.wikipedia.org/wiki/${stop.wikiTitle}`} target="_blank" rel="noopener noreferrer"
-                                            style={{ fontSize:11, color:"var(--purple)", fontWeight:600, textDecoration:"none" }}>
-                                            📖 Wikipedia
-                                          </a>
-                                        )}
-                                        {stop.bookingUrl && (
-                                          <a href={stop.bookingUrl} target="_blank" rel="noopener noreferrer"
-                                            style={{ fontSize:11, color:"var(--green)", fontWeight:600, textDecoration:"none" }}>
-                                            🔗 Book / Reserve
-                                          </a>
-                                        )}
+                                        <div className="stop-detail">{stop.note}</div>
+                                        <div style={{ display:"flex", gap:8, marginTop:6, flexWrap:"wrap" }}>
+                                          {stop.mapsUrl && (
+                                            <a href={stop.mapsUrl} target="_blank" rel="noopener noreferrer"
+                                              style={{ fontSize:11, color:"var(--blue)", fontWeight:600, textDecoration:"none" }}>
+                                              📍 Maps
+                                            </a>
+                                          )}
+                                          {(stop.wikiUrl || stop.wikiTitle) && (
+                                            <a href={stop.wikiUrl || `https://en.wikipedia.org/wiki/${stop.wikiTitle}`} target="_blank" rel="noopener noreferrer"
+                                              style={{ fontSize:11, color:"var(--purple)", fontWeight:600, textDecoration:"none" }}>
+                                              📖 Wikipedia
+                                            </a>
+                                          )}
+                                          {stop.bookingUrl && (
+                                            <a href={stop.bookingUrl} target="_blank" rel="noopener noreferrer"
+                                              style={{ fontSize:11, color:"var(--green)", fontWeight:600, textDecoration:"none" }}>
+                                              🔗 Book / Reserve
+                                            </a>
+                                          )}
+                                          {stop.cost && (
+                                            <span style={{ fontSize:11, color:"var(--amber)", fontWeight:600 }}>
+                                              ₹{Number(stop.cost).toLocaleString("en-IN")}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   </motion.div>
@@ -481,14 +537,20 @@ export default function Itinerary({ tripCtx, addToast }) {
                     <button className="btn btn-primary btn-sm" onClick={()=>findNearby()} disabled={nearbyLoading}>
                       {nearbyLoading ? "Locating…" : "📍 Use my GPS"}
                     </button>
+                    {itinerary?.destCoords && (
+                      <button className="btn btn-secondary btn-sm" onClick={()=>findNearbyAt(itinerary.destCoords.lat, itinerary.destCoords.lon)} disabled={nearbyLoading}>
+                        🏝️ Near destination
+                      </button>
+                    )}
                     <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                       {[
                         ["all","All"], ["attractions","Attractions"],
                         ["food","Food"], ["hospital","Medical"], ["parks","Parks"],
+                        ["shops","Shops"], ["fuel","Fuel/EV"],
                       ].map(([k,l])=>(
                         <button key={k}
                           className={nearbyCat===k?"chip active":"chip"}
-                          onClick={()=>{ setNearbyCat(k); if(nearby) findNearby(k); }}>
+                          onClick={()=>{ setNearbyCat(k); if(nearby) findNearbyAt(nearby.origin.lat, nearby.origin.lon, k); }}>
                           {l}
                         </button>
                       ))}
@@ -496,42 +558,70 @@ export default function Itinerary({ tripCtx, addToast }) {
                   </div>
                   {!nearby ? (
                     <div style={{ color:"var(--text-3)", fontSize:13, padding:"20px 0", textAlign:"center" }}>
-                      Tap <b>Use my GPS</b> above. We'll fetch real attractions, restaurants and services within 3 km of your location using OpenStreetMap.
+                      Tap <b>📍 Use my GPS</b> for real attractions, restaurants and services within 3 km.
+                      <br/><span style={{ fontSize:11.5 }}>Or hit <b>🏝️ Near destination</b> to explore around your itinerary's destination.</span>
                     </div>
                   ) : nearby.items.length === 0 ? (
-                    <div style={{ color:"var(--text-3)", fontSize:13 }}>No places found within 3 km — try widening the radius or another category.</div>
+                    <div style={{ color:"var(--text-3)", fontSize:13, padding:"16px 0" }}>
+                      No places found within 3 km — try a different category, widen the radius, or retry (POI providers may be temporarily slow).
+                      {nearby.hint && <div style={{ marginTop:6, fontSize:11.5, color:"var(--amber)" }}>⚠ {nearby.hint}</div>}
+                    </div>
                   ) : (
                     <div>
                       <div style={{ fontSize:12, color:"var(--text-3)", marginBottom:10 }}>
-                        {nearby.items.length} places · @ {nearby.origin?.lat?.toFixed(4)}, {nearby.origin?.lon?.toFixed(4)} · source: {nearby.source}
+                        {nearby.items.length} places · @ {nearby.origin?.lat?.toFixed(4)}, {nearby.origin?.lon?.toFixed(4)} · source: <span style={{ color:"var(--green)", fontWeight:600 }}>{nearby.source}</span>
                       </div>
-                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:10 }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:12 }}>
                         {nearby.items.map((p,i)=>(
-                          <div key={p.id||i} style={{ padding:"12px 14px", border:"1.5px solid var(--border)", borderRadius:"var(--r-md)", background:"var(--bg-soft)" }}>
-                            <div style={{ fontSize:13.5, fontWeight:700, color:"var(--text)" }}>{p.name}</div>
-                            <div style={{ fontSize:11, color:"var(--text-3)", textTransform:"uppercase", letterSpacing:"0.04em", marginTop:3 }}>{p.type}</div>
-                            <div style={{ fontSize:12, color:"var(--text-2)", marginTop:5 }}>
-                              {p.distance < 1000 ? `${p.distance} m away` : `${(p.distance/1000).toFixed(1)} km away`} · ⭐ {Number(p.rating).toFixed(1)}
-                            </div>
-                            {p.opening_hours && <div style={{ fontSize:11, color:"var(--text-3)", marginTop:3 }}>🕐 {p.opening_hours}</div>}
-                            {p.address && <div style={{ fontSize:11, color:"var(--text-3)", marginTop:3 }}>📌 {p.address}</div>}
-                            <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
-                              <a href={p.directionsUrl} target="_blank" rel="noopener noreferrer"
-                                 style={{ fontSize:11, padding:"3px 8px", background:"var(--blue-dim)", color:"var(--blue)", borderRadius:"var(--r-full)", fontWeight:600, textDecoration:"none" }}>
-                                🧭 Directions
-                              </a>
-                              <a href={p.mapsUrl} target="_blank" rel="noopener noreferrer"
-                                 style={{ fontSize:11, padding:"3px 8px", background:"var(--purple-bg)", color:"var(--purple)", borderRadius:"var(--r-full)", fontWeight:600, textDecoration:"none" }}>
-                                Maps →
-                              </a>
-                              {p.website && (
-                                <a href={p.website} target="_blank" rel="noopener noreferrer"
-                                   style={{ fontSize:11, padding:"3px 8px", background:"var(--green-bg)", color:"var(--green)", borderRadius:"var(--r-full)", fontWeight:600, textDecoration:"none" }}>
-                                  Website →
+                          <motion.div key={p.id||i}
+                            initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:i*0.03 }}
+                            whileHover={{ y:-3, boxShadow:"var(--shadow-lg)" }}
+                            style={{ border:"1.5px solid var(--border)", borderRadius:"var(--r-md)", background:"var(--bg-soft)", overflow:"hidden", cursor:"pointer", transition:"all 0.2s" }}>
+                            {p.thumbnail && (
+                              <div style={{ width:"100%", height:130, overflow:"hidden", background:"var(--bg-2)", position:"relative" }}>
+                                <img src={p.thumbnail} alt={p.name} loading="lazy"
+                                  onError={(e)=>{ e.currentTarget.src = `https://source.unsplash.com/600x400/?${encodeURIComponent(p.name + ' ' + (p.type||'place'))}`; }}
+                                  style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", transition:"transform 0.4s" }}
+                                  onMouseOver={(e)=>{ e.currentTarget.style.transform="scale(1.06)"; }}
+                                  onMouseOut={(e)=>{ e.currentTarget.style.transform="scale(1)"; }} />
+                                <div style={{ position:"absolute", top:6, right:6, padding:"3px 8px", borderRadius:"var(--r-full)", background:"rgba(0,0,0,0.65)", color:"#fff", fontSize:11, fontWeight:600, backdropFilter:"blur(6px)" }}>
+                                  ⭐ {Number(p.rating).toFixed(1)}
+                                </div>
+                                <div style={{ position:"absolute", bottom:6, left:6, padding:"2px 7px", borderRadius:"var(--r-full)", background:"rgba(0,0,0,0.65)", color:"#fff", fontSize:10, fontWeight:600 }}>
+                                  {p.distance < 1000 ? `${p.distance} m` : `${(p.distance/1000).toFixed(1)} km`}
+                                </div>
+                              </div>
+                            )}
+                            <div style={{ padding:"10px 12px" }}>
+                              <div style={{ fontSize:13.5, fontWeight:700, color:"var(--text)" }}>{p.name}</div>
+                              <div style={{ fontSize:10.5, color:"var(--text-3)", textTransform:"uppercase", letterSpacing:"0.04em", marginTop:3 }}>{p.type}</div>
+                              {p.description && <div style={{ fontSize:11.5, color:"var(--text-2)", marginTop:4, lineHeight:1.4 }}>{p.description}</div>}
+                              {p.opening_hours && <div style={{ fontSize:11, color:"var(--text-3)", marginTop:3 }}>🕐 {p.opening_hours}</div>}
+                              {p.address && <div style={{ fontSize:11, color:"var(--text-3)", marginTop:3 }}>📌 {p.address}</div>}
+                              <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                                <a href={p.directionsUrl} target="_blank" rel="noopener noreferrer"
+                                   style={{ fontSize:11, padding:"3px 8px", background:"var(--blue-dim)", color:"var(--blue)", borderRadius:"var(--r-full)", fontWeight:600, textDecoration:"none" }}>
+                                  🧭 Directions
                                 </a>
-                              )}
+                                <a href={p.mapsUrl} target="_blank" rel="noopener noreferrer"
+                                   style={{ fontSize:11, padding:"3px 8px", background:"var(--purple-bg)", color:"var(--purple)", borderRadius:"var(--r-full)", fontWeight:600, textDecoration:"none" }}>
+                                  Maps →
+                                </a>
+                                {p.website && (
+                                  <a href={p.website} target="_blank" rel="noopener noreferrer"
+                                     style={{ fontSize:11, padding:"3px 8px", background:"var(--green-bg)", color:"var(--green)", borderRadius:"var(--r-full)", fontWeight:600, textDecoration:"none" }}>
+                                    🌐 Website
+                                  </a>
+                                )}
+                                {p.phone && (
+                                  <a href={`tel:${p.phone}`}
+                                     style={{ fontSize:11, padding:"3px 8px", background:"var(--amber-bg)", color:"var(--amber)", borderRadius:"var(--r-full)", fontWeight:600, textDecoration:"none" }}>
+                                    📞 Call
+                                  </a>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
                     </div>
